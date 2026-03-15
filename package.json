@@ -1,0 +1,29 @@
+{
+  "name": "seo-automation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup-db": "tsx scripts/setup-db.ts",
+    "generate": "tsx src/jobs/daily-generate.ts",
+    "audit": "tsx src/jobs/weekly-gsc-audit.ts",
+    "optimize": "tsx src/jobs/monthly-optimize.ts",
+    "run": "tsx scripts/run.ts",
+    "test-telegram": "tsx src/notifications/telegram.ts",
+    "bot": "tsx src/bot/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.7",
+    "googleapis": "^146.0.0",
+    "grammy": "^1.41.1",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/pg": "^8.18.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
