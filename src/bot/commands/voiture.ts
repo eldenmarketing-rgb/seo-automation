@@ -27,9 +27,10 @@ interface CarDraft {
   description?: string;
   images: string[];
   enVedette?: boolean;
+  categories?: string[];
 }
 
-type VoitureStep = 'marque' | 'modele' | 'annee' | 'prix' | 'km' | 'carburant' | 'boite' | 'couleur' | 'chevaux' | 'equipements' | 'description' | 'photos' | 'vedette' | 'confirm';
+type VoitureStep = 'marque' | 'modele' | 'annee' | 'prix' | 'km' | 'carburant' | 'boite' | 'couleur' | 'chevaux' | 'equipements' | 'description' | 'photos' | 'categories' | 'vedette' | 'confirm';
 
 const STEP_PROMPTS: Record<VoitureStep, string> = {
   marque: '🚗 <b>Marque ?</b>\nEx: Peugeot, Renault, BMW...',
@@ -44,6 +45,7 @@ const STEP_PROMPTS: Record<VoitureStep, string> = {
   equipements: '📋 <b>Équipements ?</b>\nListe séparée par des virgules.\nEx: GPS, Clim auto, Caméra de recul\n\nOu tape "passer"',
   description: '✏️ <b>Description ?</b>\n1-2 phrases sur le véhicule.\n\nOu tape "auto" pour générer automatiquement.',
   photos: '📸 <b>Envoie les photos</b> (1 à 10)\nQuand tu as fini, tape "ok" ou "fin"',
+  categories: '📂 <b>Dans quelles catégories ?</b>\nSélectionne une ou plusieurs catégories, puis appuie sur ✅ Valider.',
   vedette: '⭐ <b>Afficher sur l\'accueil ?</b>',
   confirm: '',
 };
@@ -137,18 +139,25 @@ function injectCarIntoDataFile(draft: CarDraft, slug: string): void {
 }
 
 function categorize(draft: CarDraft): string {
-  const cats: string[] = [];
-  const prix = draft.prix || 0;
-  const modele = `${draft.marque} ${draft.modele}`.toLowerCase();
+  const cats = draft.categories || [];
+  if (cats.length === 0) return '"standard"';
+  return cats.map(c => `"${c}"`).join(', ');
+}
 
-  if (prix <= 15000) cats.push('"petit-prix"');
-  if (prix >= 40000) cats.push('"luxe"');
-
-  const suvKeywords = ['suv', '4x4', 'x5', 'x3', 'x1', 'tucson', 'tiguan', 'sportage', 'rav4', '3008', '5008', 'qashqai', 'duster', 'captur', 'crossover'];
-  if (suvKeywords.some(k => modele.includes(k))) cats.push('"4x4"');
-
-  if (cats.length === 0) cats.push('"standard"');
-  return cats.join(', ');
+function buildCategoryKeyboard(selected: string[]): InlineKeyboard {
+  const categories = [
+    { id: '4x4', label: '4x4 & SUV' },
+    { id: 'petit-prix', label: 'Petit Prix' },
+    { id: 'sport', label: 'Sport & Collection' },
+  ];
+  const kb = new InlineKeyboard();
+  for (const cat of categories) {
+    const check = selected.includes(cat.id) ? '✅ ' : '';
+    kb.text(`${check}${cat.label}`, `voiture_cat:${cat.id}`);
+    kb.row();
+  }
+  kb.text('✅ Valider', 'voiture_cat_done');
+  return kb;
 }
 
 function removeCarFromDataFile(slug: string): boolean {
@@ -335,6 +344,38 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     ctx.session.context!.step = 'couleur';
     await ctx.answerCallbackQuery();
     await ctx.reply(STEP_PROMPTS.couleur, { parse_mode: 'HTML' });
+  });
+
+  // Category toggle
+  bot.callbackQuery(/^voiture_cat:(.+)$/, async (ctx) => {
+    const catId = ctx.match![1];
+    const draft = ctx.session.context?.draft as CarDraft;
+    if (!draft) return;
+    if (!draft.categories) draft.categories = [];
+
+    const idx = draft.categories.indexOf(catId);
+    if (idx >= 0) {
+      draft.categories.splice(idx, 1);
+    } else {
+      draft.categories.push(catId);
+    }
+
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: buildCategoryKeyboard(draft.categories) });
+  });
+
+  // Category done → vedette step
+  bot.callbackQuery('voiture_cat_done', async (ctx) => {
+    const draft = ctx.session.context?.draft as CarDraft;
+    if (!draft) return;
+    await ctx.answerCallbackQuery();
+    ctx.session.context!.step = 'vedette';
+    await ctx.reply(STEP_PROMPTS.vedette, {
+      parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard()
+        .text('🏠 Accueil + Catalogue', 'voiture_vedette:oui')
+        .text('📋 Catalogue uniquement', 'voiture_vedette:non'),
+    });
   });
 
   // Vedette selection
@@ -606,21 +647,19 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
             await ctx.reply('⚠️ Au moins 1 photo requise. Envoie une photo ou tape "sans" pour continuer sans.');
             return;
           }
-          ctx.session.context!.step = 'vedette';
-          await ctx.reply(STEP_PROMPTS.vedette, {
+          draft.categories = [];
+          ctx.session.context!.step = 'categories';
+          await ctx.reply(STEP_PROMPTS.categories, {
             parse_mode: 'HTML',
-            reply_markup: new InlineKeyboard()
-              .text('🏠 Accueil + Catalogue', 'voiture_vedette:oui')
-              .text('📋 Catalogue uniquement', 'voiture_vedette:non'),
+            reply_markup: buildCategoryKeyboard([]),
           });
         } else if (text.toLowerCase() === 'sans') {
           draft.images = [];
-          ctx.session.context!.step = 'vedette';
-          await ctx.reply(STEP_PROMPTS.vedette, {
+          draft.categories = [];
+          ctx.session.context!.step = 'categories';
+          await ctx.reply(STEP_PROMPTS.categories, {
             parse_mode: 'HTML',
-            reply_markup: new InlineKeyboard()
-              .text('🏠 Accueil + Catalogue', 'voiture_vedette:oui')
-              .text('📋 Catalogue uniquement', 'voiture_vedette:non'),
+            reply_markup: buildCategoryKeyboard([]),
           });
         } else {
           await ctx.reply('📸 Envoie une photo ou tape "ok" quand c\'est fini.');
@@ -641,7 +680,9 @@ async function showConfirmation(ctx: BotContext, draft: CarDraft) {
     (draft.couleur ? `🎨 ${draft.couleur}\n` : '') +
     (draft.chevaux ? `🏎️ ${draft.chevaux} ch\n` : '') +
     (draft.equipements?.length ? `📋 ${draft.equipements.join(', ')}\n` : '') +
+    (draft.categories?.length ? `📂 ${draft.categories.map(c => c === '4x4' ? '4x4 & SUV' : c === 'petit-prix' ? 'Petit Prix' : c === 'sport' ? 'Sport & Collection' : c).join(', ')}\n` : '') +
     `📸 ${draft.images.length} photo(s)\n` +
+    `⭐ ${draft.enVedette ? 'En vedette (accueil)' : 'Catalogue uniquement'}\n` +
     `🔗 <code>${slug}</code>\n\n` +
     `✅ Confirmer ?`;
 
