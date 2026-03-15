@@ -22,7 +22,7 @@ interface CarDraft {
   carburant?: string;
   boiteVitesse?: string;
   couleur?: string;
-  chevaux?: number;
+  chevaux?: string;
   equipements?: string[];
   description?: string;
   images: string[];
@@ -41,7 +41,7 @@ const STEP_PROMPTS: Record<VoitureStep, string> = {
   carburant: '⛽ <b>Carburant ?</b>',
   boite: '⚙️ <b>Boîte de vitesse ?</b>',
   couleur: '🎨 <b>Couleur ?</b>\nEx: Gris Artense, Blanc Glacier...',
-  chevaux: '🏎️ <b>Puissance (chevaux) ?</b>\nEx: 130 (ou "passer" pour ignorer)',
+  chevaux: '🏎️ <b>Puissance / Motorisation ?</b>\nEx: 130, 2.2L, 150ch 2.0 HDi\n\nOu tape "passer" pour ignorer',
   equipements: '📋 <b>Équipements ?</b>\nListe séparée par des virgules.\nEx: GPS, Clim auto, Caméra de recul\n\nOu tape "passer"',
   description: '✏️ <b>Description ?</b>\n1-2 phrases sur le véhicule.\n\nOu tape "auto" pour générer automatiquement.',
   photos: '📸 <b>Envoie les photos</b> (1 à 10)\nQuand tu as fini, tape "ok" ou "fin"',
@@ -123,7 +123,7 @@ function injectCarIntoDataFile(draft: CarDraft, slug: string): void {
     carburant: "${draft.carburant}",
     boiteVitesse: "${draft.boiteVitesse}",
     categorie: [${categorize(draft)}],
-    chevaux: ${draft.chevaux || 0},
+    chevaux: ${draft.chevaux ? (/^\d+$/.test(draft.chevaux) ? draft.chevaux : `"${draft.chevaux}"`) : 0},
     couleur: "${draft.couleur || ''}",
     portes: 5,
     equipements: [${(draft.equipements || []).map(e => `"${e.trim()}"`).join(', ')}],
@@ -616,8 +616,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
       case 'chevaux':
         if (text.toLowerCase() !== 'passer') {
-          const cv = parseInt(text);
-          if (cv) draft.chevaux = cv;
+          draft.chevaux = text;
         }
         ctx.session.context!.step = 'equipements';
         await ctx.reply(STEP_PROMPTS.equipements, { parse_mode: 'HTML' });
@@ -678,7 +677,7 @@ async function showConfirmation(ctx: BotContext, draft: CarDraft) {
     `💰 ${draft.prix?.toLocaleString('fr-FR')}€\n` +
     `⛽ ${draft.carburant} — ⚙️ ${draft.boiteVitesse}\n` +
     (draft.couleur ? `🎨 ${draft.couleur}\n` : '') +
-    (draft.chevaux ? `🏎️ ${draft.chevaux} ch\n` : '') +
+    (draft.chevaux ? `🏎️ ${draft.chevaux}\n` : '') +
     (draft.equipements?.length ? `📋 ${draft.equipements.join(', ')}\n` : '') +
     (draft.categories?.length ? `📂 ${draft.categories.map(c => c === '4x4' ? '4x4 & SUV' : c === 'petit-prix' ? 'Petit Prix' : c === 'sport' ? 'Sport & Collection' : c).join(', ')}\n` : '') +
     `📸 ${draft.images.length} photo(s)\n` +
