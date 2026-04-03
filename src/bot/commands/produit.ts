@@ -21,6 +21,7 @@ const CATEGORIES = [
   { slug: 'champagnes', label: '🥂 Champagnes' },
   { slug: 'soft-snacks', label: '🥤 Softs & Snacks' },
   { slug: 'packs', label: '🎉 Packs Soirée' },
+  { slug: 'formules', label: '🍽️ Formules' },
 ];
 
 interface ProductDraft {
@@ -122,13 +123,18 @@ function injectProduct(draft: ProductDraft, slug: string): void {
   let content = readFileSync(CATALOGUE_FILE, 'utf-8');
 
   const imageField = draft.image ? `image: "/images/products/${slug}.jpg", ` : '';
-  const descField = draft.description ? `description: ${JSON.stringify(draft.description)}, ` : '';
+  const descField = `description: ${JSON.stringify(draft.description || '')}, `;
   const popularField = draft.popular ? `popular: true, ` : '';
 
   const entry = `  { slug: "${slug}", name: "${draft.name}", category: "${draft.category}", ${descField}price: ${draft.price}, volume: "${draft.volume}", ${imageField}available: true, ${popularField}},`;
 
-  // Insert before the closing ].map(...)
-  content = content.replace(/\n\]\.map/, `\n${entry}\n].map`);
+  // Insert before the closing ]; of the products array (skip categories array)
+  const productsMarker = 'export const products: Product[] = [';
+  const productsStart = content.indexOf(productsMarker);
+  if (productsStart === -1) throw new Error('products array not found in catalogue.ts');
+  const closingBracket = content.indexOf('\n];', productsStart);
+  if (closingBracket === -1) throw new Error('closing bracket of products array not found');
+  content = content.slice(0, closingBracket) + `\n${entry}` + content.slice(closingBracket);
   writeFileSync(CATALOGUE_FILE, content, 'utf-8');
 }
 

@@ -33,6 +33,9 @@ export const cities66: City66[] = [
   { name: 'Saint-Laurent-de-la-Salanque', slug: 'saint-laurent-de-la-salanque', postalCode: '66250', population: 10000, distanceFromPerpignan: '15 min', zone: 'peripherie' },
   { name: 'Le Barcarès', slug: 'le-barcares', postalCode: '66420', population: 4500, distanceFromPerpignan: '18 min', zone: 'peripherie' },
   { name: 'Argelès-sur-Mer', slug: 'argeles-sur-mer', postalCode: '66700', population: 10600, distanceFromPerpignan: '20 min', zone: 'peripherie' },
+  { name: 'Sainte-Marie-la-Mer', slug: 'sainte-marie-la-mer', postalCode: '66470', population: 4800, distanceFromPerpignan: '15 min', zone: 'peripherie' },
+  { name: 'Torreilles', slug: 'torreilles', postalCode: '66440', population: 3500, distanceFromPerpignan: '15 min', zone: 'peripherie' },
+  { name: 'Villeneuve-de-la-Raho', slug: 'villeneuve-de-la-raho', postalCode: '66180', population: 4800, distanceFromPerpignan: '10 min', zone: 'peripherie' },
 
   // Zone éloignée (20-40 min)
   { name: 'Collioure', slug: 'collioure', postalCode: '66190', population: 2900, distanceFromPerpignan: '25 min', zone: 'eloigne' },
@@ -82,5 +85,12 @@ export const citiesBySite: Record<string, string[]> = {
     'canohes', 'toulouges', 'le-soler', 'pollestres', 'rivesaltes',
     'canet-en-roussillon', 'elne', 'thuir', 'saint-cyprien',
     'argeles-sur-mer', 'ceret', 'prades', 'ille-sur-tet', 'claira',
+  ],
+  restaurant: [
+    'perpignan', 'cabestany', 'saint-esteve', 'pia', 'bompas',
+    'toulouges', 'le-soler', 'claira', 'rivesaltes',
+    'canet-en-roussillon', 'saint-cyprien', 'elne', 'thuir',
+    'argeles-sur-mer', 'le-barcares', 'sainte-marie-la-mer',
+    'torreilles', 'villeneuve-de-la-raho', 'leucate',
   ],
 };

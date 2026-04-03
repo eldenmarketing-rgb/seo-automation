@@ -431,6 +431,138 @@ export async function upsertMenuItem(item: MenuItemRow) {
   return data;
 }
 
+// --- Pending Pages ---
+
+export interface PendingPageRow {
+  id?: string;
+  site_key: string;
+  slug: string;
+  page_type: 'city' | 'service' | 'city_service';
+  service_slug?: string;
+  city_slug?: string;
+  score: number;
+  score_details?: string;
+  status?: 'pending_approval' | 'approved' | 'rejected' | 'generating' | 'generated' | 'error';
+  batch_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function upsertPendingPages(rows: PendingPageRow[]) {
+  if (rows.length === 0) return 0;
+  const db = getSupabase();
+  let stored = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const batch = rows.slice(i, i + 500);
+    const { error } = await db
+      .from('pending_pages')
+      .upsert(batch, { onConflict: 'site_key,slug' });
+    if (error) {
+      if (error.message.includes('relation') && error.message.includes('does not exist')) return -1;
+      throw new Error(`upsertPendingPages: ${error.message}`);
+    }
+    stored += batch.length;
+  }
+  return stored;
+}
+
+export async function getPendingPages(siteKey?: string, status?: string) {
+  const db = getSupabase();
+  let query = db.from('pending_pages').select('*');
+  if (siteKey) query = query.eq('site_key', siteKey);
+  if (status) query = query.eq('status', status);
+  const { data, error } = await query.order('score', { ascending: false });
+  if (error) {
+    if (error.message.includes('relation') && error.message.includes('does not exist')) return [];
+    throw new Error(`getPendingPages: ${error.message}`);
+  }
+  return data as PendingPageRow[];
+}
+
+export async function updatePendingPageStatus(id: string, status: string) {
+  const db = getSupabase();
+  const { error } = await db
+    .from('pending_pages')
+    .update({ status })
+    .eq('id', id);
+  if (error) throw new Error(`updatePendingPageStatus: ${error.message}`);
+}
+
+export async function updatePendingPagesBulk(siteKey: string, fromStatus: string, toStatus: string) {
+  const db = getSupabase();
+  const { data, error } = await db
+    .from('pending_pages')
+    .update({ status: toStatus })
+    .eq('site_key', siteKey)
+    .eq('status', fromStatus)
+    .select();
+  if (error) throw new Error(`updatePendingPagesBulk: ${error.message}`);
+  return data?.length || 0;
+}
+
+export async function updateAllPendingPagesBulk(fromStatus: string, toStatus: string) {
+  const db = getSupabase();
+  const { data, error } = await db
+    .from('pending_pages')
+    .update({ status: toStatus })
+    .eq('status', fromStatus)
+    .select();
+  if (error) throw new Error(`updateAllPendingPagesBulk: ${error.message}`);
+  return data?.length || 0;
+}
+
+export async function deletePendingPages(siteKey: string, status?: string) {
+  const db = getSupabase();
+  let query = db.from('pending_pages').delete().eq('site_key', siteKey);
+  if (status) query = query.eq('status', status);
+  const { error } = await query;
+  if (error) throw new Error(`deletePendingPages: ${error.message}`);
+}
+
+// --- Discovered Keywords ---
+
+export interface DiscoveredKeywordRow {
+  id?: string;
+  site_key: string;
+  keyword: string;
+  score: number;
+  source: string;
+  suggested_page?: string;
+  status?: 'new' | 'approved' | 'rejected';
+  created_at?: string;
+}
+
+export async function upsertDiscoveredKeywords(rows: DiscoveredKeywordRow[]) {
+  if (rows.length === 0) return 0;
+  const db = getSupabase();
+  let stored = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const batch = rows.slice(i, i + 500);
+    const { error } = await db
+      .from('discovered_keywords')
+      .upsert(batch, { onConflict: 'site_key,keyword' });
+    if (error) {
+      // Table might not exist yet — log and skip
+      if (error.message.includes('relation') && error.message.includes('does not exist')) return -1;
+      throw new Error(`upsertDiscoveredKeywords: ${error.message}`);
+    }
+    stored += batch.length;
+  }
+  return stored;
+}
+
+export async function getDiscoveredKeywords(siteKey: string, status?: string) {
+  const db = getSupabase();
+  let query = db.from('discovered_keywords').select('*').eq('site_key', siteKey);
+  if (status) query = query.eq('status', status);
+  const { data, error } = await query.order('score', { ascending: false });
+  if (error) {
+    if (error.message.includes('relation') && error.message.includes('does not exist')) return [];
+    throw new Error(`getDiscoveredKeywords: ${error.message}`);
+  }
+  return data as DiscoveredKeywordRow[];
+}
+
 // --- Optimization Candidates View ---
 
 export async function getOptimizationCandidates(siteKey?: string) {

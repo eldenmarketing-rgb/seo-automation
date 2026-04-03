@@ -78,11 +78,11 @@ export const sites: Record<string, SiteConfig> = {
 
   carrosserie: {
     key: 'carrosserie',
-    name: 'Carrosserie Pro',
-    domain: 'https://carrosserie-pro.fr',
+    name: 'Carrossier Pro',
+    domain: 'https://carrossier-pro.fr',
     business: 'Carrosserie automobile - Réparation & Peinture',
     phone: '06 23 15 35 04',
-    email: 'contact@carrosserie-pro.fr',
+    email: 'contact@carrossier-pro.fr',
     address: 'Avenue du Commandant Soubielle',
     postalCode: '66000',
     city: 'Perpignan',

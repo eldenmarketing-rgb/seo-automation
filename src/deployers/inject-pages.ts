@@ -18,6 +18,7 @@ export function getExistingSlugsFromFiles(siteKey: string): string[] {
   switch (siteKey) {
     case 'garage':
       filesToScan.push(`${site.projectPath}/data/cities.ts`);
+      filesToScan.push(`${site.projectPath}/data/services.ts`);
       break;
     case 'vtc':
       filesToScan.push(`${site.projectPath}/lib/cities.tsx`);
@@ -27,6 +28,15 @@ export function getExistingSlugsFromFiles(siteKey: string): string[] {
       break;
     case 'massage':
       filesToScan.push(`${site.projectPath}/data/seo-pages.ts`);
+      break;
+    case 'restaurant':
+      filesToScan.push(`${site.projectPath}/data/seo-pages.ts`);
+      filesToScan.push(`${site.projectPath}/data/catalogue.ts`);
+      filesToScan.push(`${site.projectPath}/data/blog.ts`);
+      break;
+    case 'voitures':
+      filesToScan.push(`${site.projectPath}/data/cars.ts`);
+      filesToScan.push(`${site.projectPath}/data/cities.ts`);
       break;
   }
 
@@ -54,6 +64,8 @@ export async function injectPages(siteKey: string, pages: SeoPageRow[]): Promise
     case 'data-files':
       if (siteKey === 'garage') return injectGaragePages(site, pages);
       if (siteKey === 'vtc') return injectVtcPages(site, pages);
+      if (siteKey === 'voitures') return injectVoituresPages(site, pages);
+      if (siteKey === 'restaurant') return injectRestaurantPages(site, pages);
       return [];
     case 'config-only':
       return injectCarrosseriePages(site, pages);
@@ -83,8 +95,13 @@ function injectGaragePages(site: SiteConfig, pages: SeoPageRow[]): string[] {
 
     const c = page.content as Record<string, unknown>;
     const entry = generateGarageCityEntry(page, c);
-    // Insert before the closing bracket of the array
-    content = content.replace(/\n\];\s*$/, `\n${entry}\n];\n`);
+    // Insert before the closing bracket of the array (may have exports after)
+    const replaced = content.replace(/\n\];\s*(\n|$)/, `\n${entry}\n];\n`);
+    if (replaced === content) {
+      logger.warn(`Could not find array closing for ${page.slug} in ${filePath}`);
+      continue;
+    }
+    content = replaced;
     injected.push(page.slug);
   }
 
@@ -176,12 +193,81 @@ function injectVtcPages(site: SiteConfig, pages: SeoPageRow[]): string[] {
     faq: ${JSON.stringify(faq, null, 6)},
   },`;
 
-    content = content.replace(/\n\];\s*$/, `\n${entry}\n];\n`);
+    const replaced = content.replace(/\n\];\s*(\n|$)/, `\n${entry}\n];\n`);
+    if (replaced === content) {
+      logger.warn(`Could not find array closing for ${page.slug} in VTC cities`);
+      continue;
+    }
+    content = replaced;
     injected.push(page.slug);
   }
 
   writeFileSync(filePath, content, 'utf-8');
   logger.success(`Injected ${injected.length} pages into VTC cities`);
+  updateSitemap(site, injected);
+  return injected;
+}
+
+// ─── VOITURES: Append to data/cities.ts ─────────────────────
+
+function injectVoituresPages(site: SiteConfig, pages: SeoPageRow[]): string[] {
+  const injected: string[] = [];
+  const filePath = `${site.projectPath}/data/cities.ts`;
+
+  if (!existsSync(filePath)) {
+    logger.error(`Voitures cities file not found: ${filePath}`);
+    return [];
+  }
+
+  let content = readFileSync(filePath, 'utf-8');
+
+  for (const page of pages) {
+    if (content.includes(`slug: "${page.slug}"`)) {
+      logger.warn(`Slug "${page.slug}" already exists in voitures cities, skipping`);
+      continue;
+    }
+
+    const c = page.content as Record<string, unknown>;
+    const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
+    const highlights = (c.highlights as string[]) || [];
+    const nearbyPlaces = (c.nearbyPlaces as string[]) || [];
+    const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
+    const trustSignals = (c.trustSignals as string[]) || [];
+    const internalLinks = (c.internalLinks as Array<{ slug: string; label: string }>) || [];
+    const featuredServices = (c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [];
+
+    const entry = `
+  // ── ${page.city || page.slug} (auto-generated) ──────
+  {
+    slug: ${JSON.stringify(page.slug)},
+    name: ${JSON.stringify(page.city || '')},
+    metaTitle: ${JSON.stringify(page.meta_title)},
+    metaDescription: ${JSON.stringify(page.meta_description)},
+    h1: ${JSON.stringify(page.h1)},
+    heroTitle: ${JSON.stringify(c.heroTitle || page.h1)},
+    heroSubtitle: ${JSON.stringify(c.heroSubtitle || '')},
+    intro: ${JSON.stringify(c.intro || '')},
+    seoSections: ${JSON.stringify(seoSections, null, 6)},
+    highlights: ${JSON.stringify(highlights, null, 6)},
+    nearbyPlaces: ${JSON.stringify(nearbyPlaces, null, 6)},
+    faq: ${JSON.stringify(faq, null, 6)},
+    trustSignals: ${JSON.stringify(trustSignals, null, 6)},
+    internalLinks: ${JSON.stringify(internalLinks, null, 6)},
+    featuredServices: ${JSON.stringify(featuredServices, null, 6)},
+    updatedDate: ${JSON.stringify(c.updatedDate || new Date().toISOString().split('T')[0])},
+  },`;
+
+    const replaced = content.replace(/\n\];\s*(\n|$)/, `\n${entry}\n];\n`);
+    if (replaced === content) {
+      logger.warn(`Could not find array closing for ${page.slug} in voitures cities`);
+      continue;
+    }
+    content = replaced;
+    injected.push(page.slug);
+  }
+
+  writeFileSync(filePath, content, 'utf-8');
+  logger.success(`Injected ${injected.length} city pages into voitures data`);
   updateSitemap(site, injected);
   return injected;
 }
@@ -527,6 +613,89 @@ export default async function SeoPage({ params }: { params: Promise<{ slug: stri
 `, 'utf-8');
 
   logger.success('Created [slug]/page.tsx for Elaya Rituel');
+}
+
+// ─── RESTAURANT: Rewrite data/seo-pages.ts with unique content ──
+
+function injectRestaurantPages(site: SiteConfig, pages: SeoPageRow[]): string[] {
+  const injected: string[] = [];
+  const filePath = `${site.projectPath}/data/seo-pages.ts`;
+
+  if (!existsSync(filePath)) {
+    logger.error(`Restaurant data file not found: ${filePath}`);
+    return [];
+  }
+
+  let content = readFileSync(filePath, 'utf-8');
+
+  for (const page of pages) {
+    if (content.includes(`slug: "${page.slug}"`)) {
+      // Replace existing page content
+      const c = page.content as Record<string, unknown>;
+      const entry = generateRestaurantEntry(page, c);
+
+      // Try to replace the existing cityPage() call or object for this slug
+      // Match cityPage("slug", ...) pattern
+      const cityPageRegex = new RegExp(
+        `cityPage\\("${page.slug}"[^)]*\\),?`,
+        'g'
+      );
+      if (cityPageRegex.test(content)) {
+        content = content.replace(cityPageRegex, entry + ',');
+        injected.push(page.slug);
+        logger.info(`Replaced cityPage() for ${page.slug}`);
+      } else {
+        // Try matching a full object block with this slug
+        const objRegex = new RegExp(
+          `\\{[\\s\\S]*?slug:\\s*"${page.slug}"[\\s\\S]*?\\},`,
+          'g'
+        );
+        if (objRegex.test(content)) {
+          content = content.replace(objRegex, entry + ',');
+          injected.push(page.slug);
+          logger.info(`Replaced object for ${page.slug}`);
+        } else {
+          logger.warn(`Could not find entry for ${page.slug} to replace`);
+        }
+      }
+    } else {
+      // Append new page
+      const c = page.content as Record<string, unknown>;
+      const entry = generateRestaurantEntry(page, c);
+      content = content.replace(/\n\];\s*\nexport function/, `\n  ${entry},\n];\n\nexport function`);
+      injected.push(page.slug);
+      logger.info(`Appended new page: ${page.slug}`);
+    }
+  }
+
+  writeFileSync(filePath, content, 'utf-8');
+  logger.success(`Restaurant: injected/updated ${injected.length} pages in ${filePath}`);
+  updateSitemap(site, injected);
+  return injected;
+}
+
+function generateRestaurantEntry(page: SeoPageRow, c: Record<string, unknown>): string {
+  const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
+  const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
+  const highlights = (c.highlights as string[]) || [];
+  const trustSignals = (c.trustSignals as string[]) || [];
+  const internalLinks = (c.internalLinks as Array<{ slug: string; label: string }>) || [];
+
+  return `  {
+    slug: ${JSON.stringify(page.slug)},
+    metaTitle: ${JSON.stringify(page.meta_title)},
+    metaDescription: ${JSON.stringify(page.meta_description)},
+    h1: ${JSON.stringify(page.h1)},
+    heroTitle: ${JSON.stringify(c.heroTitle || page.h1)},
+    heroSubtitle: ${JSON.stringify(c.heroSubtitle || '')},
+    intro: ${JSON.stringify(c.intro || '')},
+    highlights: ${JSON.stringify(highlights, null, 6)},
+    seoSections: ${JSON.stringify(seoSections, null, 6)},
+    faq: ${JSON.stringify(faq, null, 6)},
+    trustSignals: ${JSON.stringify(trustSignals, null, 6)},
+    internalLinks: ${JSON.stringify(internalLinks, null, 6)},
+    updatedDate: ${JSON.stringify(c.updatedDate || new Date().toISOString().split('T')[0])},
+  }`;
 }
 
 // ─── Sitemap update helper ─────────────────────────────────

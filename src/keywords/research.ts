@@ -27,8 +27,13 @@ export async function quickKeywordSuggestions(
   const seen = new Set<string>();
   const results: KeywordSuggestion[] = [];
 
-  const promises = seeds.map(seed => googleSuggest(seed));
-  const batchResults = await Promise.all(promises);
+  // Sequential with 500ms delay to avoid rate-limiting
+  const batchResults: string[][] = [];
+  for (const seed of seeds) {
+    const suggestions = await googleSuggest(seed);
+    batchResults.push(suggestions);
+    await new Promise(r => setTimeout(r, 500));
+  }
 
   for (const suggestions of batchResults) {
     for (const kw of suggestions) {
@@ -100,15 +105,32 @@ export async function competitorKeywords(
 /**
  * Fetch Google Autocomplete suggestions for a seed keyword.
  * Free, no API key needed — uses the public autocomplete endpoint.
+ * Retries once with 2s backoff if rate-limited (HTML response).
  */
-async function googleSuggest(seed: string): Promise<string[]> {
+async function googleSuggest(seed: string, retryCount = 0): Promise<string[]> {
   const url = `https://suggestqueries.google.com/complete/search?client=firefox&hl=fr&gl=fr&q=${encodeURIComponent(seed)}`;
 
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' },
     });
-    const data = await res.json() as [string, string[]];
+
+    const contentType = res.headers.get('content-type') || '';
+    const text = await res.text();
+
+    // Detect HTML (rate-limit / captcha) response
+    if (text.startsWith('<') || contentType.includes('text/html')) {
+      if (retryCount === 0) {
+        const backoff = 2000 + Math.random() * 1000;
+        logger.warn(`Google Suggest rate-limited for "${seed}", retrying in ${Math.round(backoff)}ms...`);
+        await new Promise(r => setTimeout(r, backoff));
+        return googleSuggest(seed, 1);
+      }
+      logger.warn(`Google Suggest still rate-limited for "${seed}" after retry, returning empty`);
+      return [];
+    }
+
+    const data = JSON.parse(text) as [string, string[]];
     return data[1] || [];
   } catch (e) {
     logger.warn(`Google Suggest failed for "${seed}": ${(e as Error).message}`);
@@ -150,31 +172,24 @@ export async function researchKeywords(
   const seen = new Set<string>();
   const results: KeywordSuggestion[] = [];
 
-  // Fetch in batches of 5 to avoid rate limiting
-  for (let i = 0; i < allSeeds.length; i += 5) {
-    const batch = allSeeds.slice(i, i + 5);
-    const promises = batch.map(seed => googleSuggest(seed));
-    const batchResults = await Promise.all(promises);
+  // Sequential with 500ms delay to avoid rate-limiting
+  for (const seed of allSeeds) {
+    const suggestions = await googleSuggest(seed);
 
-    for (const suggestions of batchResults) {
-      for (const kw of suggestions) {
-        const normalized = kw.toLowerCase().trim();
-        if (seen.has(normalized)) continue;
-        seen.add(normalized);
+    for (const kw of suggestions) {
+      const normalized = kw.toLowerCase().trim();
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
 
-        const wordCount = normalized.split(/\s+/).length;
-        results.push({
-          keyword: normalized,
-          type: wordCount <= 3 ? 'short' : 'long',
-          source: 'google_suggest',
-        });
-      }
+      const wordCount = normalized.split(/\s+/).length;
+      results.push({
+        keyword: normalized,
+        type: wordCount <= 3 ? 'short' : 'long',
+        source: 'google_suggest',
+      });
     }
 
-    // Small delay between batches
-    if (i + 5 < allSeeds.length) {
-      await new Promise(r => setTimeout(r, 200));
-    }
+    await new Promise(r => setTimeout(r, 500));
   }
 
   // Sort: long tail first (more specific = easier to rank), then alphabetically
