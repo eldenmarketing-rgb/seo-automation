@@ -153,71 +153,118 @@ function mapLinksToAnchors(links: Array<{ slug: string; label?: string; anchor?:
   }));
 }
 
+/**
+ * Find matching brace end, skipping string literals.
+ * startIdx must point to the opening { or [.
+ */
+function findMatchingBrace(text: string, startIdx: number): number {
+  const open = text[startIdx];
+  const close = open === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = startIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1; // not found
+}
+
+/** Extract a top-level field value from a TS object literal string, string-aware */
+function extractTsField(block: string, fieldName: string): string | null {
+  // Match "fieldName:" at start of line or after whitespace (not inside a string)
+  // We search for the field outside of string context
+  const pattern = new RegExp(`(?:^|[,{\\s])${fieldName}:\\s*`, 'gm');
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(block)) !== null) {
+    const valStart = match.index + match[0].length;
+    const firstChar = block[valStart];
+
+    if (firstChar === '[' || firstChar === '{') {
+      const end = findMatchingBrace(block, valStart);
+      if (end !== -1) return block.slice(valStart, end + 1);
+    } else if (firstChar === '"') {
+      // Find closing quote (handle escapes)
+      let i = valStart + 1;
+      while (i < block.length) {
+        if (block[i] === '\\') { i += 2; continue; }
+        if (block[i] === '"') return block.slice(valStart, i + 1);
+        i++;
+      }
+    } else {
+      // Simple value — until comma or newline
+      const rest = block.slice(valStart);
+      const endMatch = rest.match(/^[^,\n]+/);
+      if (endMatch) return endMatch[0].trim();
+    }
+  }
+  return null;
+}
+
 /** Merge SEO content into an existing service entry in services.ts */
 function mergeGarageServiceEntry(fileContent: string, page: SeoPageRow, c: Record<string, unknown>): string {
   const slug = page.slug;
 
-  // Find the object block for this slug using brace counting
+  // Find the TOP-LEVEL ServicePage object for this slug.
+  // The slug also appears inside internalLinks of other entries as { slug: "...", anchor: "..." }.
+  // A ServicePage entry has "name:" right after slug, while InternalLink has "anchor:".
   const slugMarker = `slug: "${slug}"`;
-  const markerIdx = fileContent.indexOf(slugMarker);
+  let markerIdx = -1;
+  let searchFrom = 0;
+
+  while (searchFrom < fileContent.length) {
+    const idx = fileContent.indexOf(slugMarker, searchFrom);
+    if (idx === -1) break;
+
+    // Look at what follows the slug field: ", name:" = ServicePage, ", anchor:" = InternalLink
+    const afterSlug = fileContent.slice(idx + slugMarker.length, idx + slugMarker.length + 30);
+    if (afterSlug.includes('name:') || afterSlug.includes('name :')) {
+      markerIdx = idx;
+      break;
+    }
+
+    searchFrom = idx + slugMarker.length;
+  }
+
   if (markerIdx === -1) return fileContent;
 
   // Walk backwards to find the opening { of this object
   let objStart = markerIdx;
   while (objStart > 0 && fileContent[objStart] !== '{') objStart--;
 
-  // Walk forward from objStart to find matching closing }
-  let depth = 0;
-  let objEnd = objStart;
-  for (let i = objStart; i < fileContent.length; i++) {
-    if (fileContent[i] === '{') depth++;
-    else if (fileContent[i] === '}') {
-      depth--;
-      if (depth === 0) { objEnd = i; break; }
-    }
+  // Walk forward using string-aware brace counting
+  const objEnd = findMatchingBrace(fileContent, objStart);
+  if (objEnd === -1) {
+    logger.warn(`Could not find closing brace for ${slug}`);
+    return fileContent;
   }
 
   const originalBlock = fileContent.slice(objStart, objEnd + 1);
 
-  // Extract static fields we want to KEEP from the original
-  const extractField = (name: string): string | null => {
-    // Match field: value (handles multiline arrays/objects)
-    const regex = new RegExp(`${name}:\\s*`);
-    const match = regex.exec(originalBlock);
-    if (!match) return null;
-    const start = match.index + match[0].length;
-    // Find the value end — handle arrays, objects, strings
-    const firstChar = originalBlock[start];
-    if (firstChar === '[' || firstChar === '{') {
-      let d = 0;
-      const close = firstChar === '[' ? ']' : '}';
-      const open = firstChar;
-      for (let i = start; i < originalBlock.length; i++) {
-        if (originalBlock[i] === open) d++;
-        else if (originalBlock[i] === close) { d--; if (d === 0) return originalBlock.slice(start, i + 1); }
-      }
-    }
-    if (firstChar === '"') {
-      const end = originalBlock.indexOf('"', start + 1);
-      return originalBlock.slice(start, end + 1);
-    }
-    // Simple value until comma or newline
-    const endMatch = originalBlock.slice(start).match(/^[^,\n]+/);
-    return endMatch ? endMatch[0].trim() : null;
-  };
+  // Extract static fields we want to KEEP
+  const name = extractTsField(originalBlock, 'name') || JSON.stringify(page.service || '');
+  const emoji = extractTsField(originalBlock, 'emoji') || '"🔧"';
+  const category = extractTsField(originalBlock, 'category') || '"entretien"';
+  const canonical = extractTsField(originalBlock, 'canonical') || JSON.stringify('/' + slug);
+  const heroImage = extractTsField(originalBlock, 'heroImage');
+  const educationalTitle = extractTsField(originalBlock, 'educationalTitle') || JSON.stringify((c.seoSections as any)?.[0]?.title || '');
+  const educationalContent = extractTsField(originalBlock, 'educationalContent') || JSON.stringify((c.seoSections as any)?.[0]?.content || '');
+  const process = extractTsField(originalBlock, 'process') || '[]';
+  const brands = extractTsField(originalBlock, 'brands') || '[]';
+  const ctaTitle = extractTsField(originalBlock, 'ctaTitle') || JSON.stringify(`Besoin de ${page.service} à ${page.city} ? Appelez-nous`);
+  const schemaService = extractTsField(originalBlock, 'schemaService') || `{ name: ${JSON.stringify(page.meta_title)}, description: ${JSON.stringify(page.meta_description)} }`;
 
-  const name = extractField('name') || JSON.stringify(page.service || '');
-  const emoji = extractField('emoji') || '"🔧"';
-  const category = extractField('category') || '"entretien"';
-  const canonical = extractField('canonical') || JSON.stringify('/' + slug);
-  const heroImage = extractField('heroImage');
-  const educationalTitle = extractField('educationalTitle') || JSON.stringify((c.seoSections as any)?.[0]?.title || '');
-  const educationalContent = extractField('educationalContent') || JSON.stringify((c.seoSections as any)?.[0]?.content || '');
-  const process = extractField('process') || '[]';
-  const brands = extractField('brands') || '[]';
-  const ctaTitle = extractField('ctaTitle') || JSON.stringify(`Besoin de ${page.service} à ${page.city} ? Appelez-nous`);
-  const schemaService = extractField('schemaService') || `{ name: ${JSON.stringify(page.meta_title)}, description: ${JSON.stringify(page.meta_description)} }`;
-
+  // New SEO content from Supabase
   const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
   const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
   const rawLinks = (c.internalLinks as Array<{ slug: string; label?: string; anchor?: string }>) || [];
