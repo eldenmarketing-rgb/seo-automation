@@ -32,7 +32,7 @@ import { buildPrompt, buildOptimizationPrompt } from './universal-prompt.js';
 import { buildUniversalSchemaOrg } from './universal-schema.js';
 import { getSiteModeConfig } from '../../config/site-mode-registry.js';
 import { computeCocoonLinks } from '../linking/cocooning.js';
-import { enrichedKeywordSuggestions } from '../keywords/research-v2.js';
+// Keywords now fetched from Supabase keyword_clusters (no API calls)
 import { SeoPageRow } from '../db/supabase.js';
 import * as logger from '../utils/logger.js';
 
@@ -64,43 +64,60 @@ async function buildCocooningContext(page: UniversalPage): Promise<string> {
 
 async function buildKeywordsContext(page: UniversalPage): Promise<string> {
   try {
-    let seed: string;
+    // 1. Try to find a keyword cluster from Supabase (pre-computed, with real volumes)
+    const { getClusterForSlug, getDiscoveredKeywords } = await import('../db/supabase.js');
 
-    if (page.service && page.city) {
-      seed = `${page.service.name} ${page.city.name}`;
-    } else if (page.city) {
-      seed = `${page.site.business || page.site.name} ${page.city.name}`;
-    } else if (page.topic) {
-      seed = page.topic.name;
-    } else if (page.product) {
-      seed = page.product.name;
-    } else {
-      return '';
+    // Build slug patterns to search for
+    const slugPatterns: string[] = [page.slug];
+    if (page.service) {
+      slugPatterns.push(page.service.slug);
+      if (page.city) slugPatterns.push(`${page.service.slug}-[ville]`);
     }
 
-    const location = page.city?.name || '';
-    const dept = page.city?.department || '66';
-    const keywords = await enrichedKeywordSuggestions(seed, location, dept, 15);
-    const longTail = keywords.filter(k => k.type === 'long').slice(0, 12);
+    let cluster = null;
+    for (const pattern of slugPatterns) {
+      cluster = await getClusterForSlug(page.siteKey, pattern);
+      if (cluster) break;
+    }
 
-    if (longTail.length === 0) return '';
+    if (cluster && cluster.keywords_list.length > 0) {
+      // Sort by volume desc, take top 20
+      const kwList = [...cluster.keywords_list]
+        .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+        .slice(0, 20);
 
-    // Si on a des volumes DataForSEO, les inclure dans le prompt
-    const hasVolumes = longTail.some(k => k.volume && k.volume > 0);
-
-    if (hasVolumes) {
-      const lines = longTail.map(k => {
+      const lines = kwList.map(k => {
         const vol = k.volume ? ` (${k.volume}/mois)` : '';
-        const cpc = k.cpc ? ` [CPC: ${k.cpc.toFixed(2)}€]` : '';
-        return `- "${k.keyword}"${vol}${cpc}`;
+        return `- "${k.keyword}"${vol}`;
       });
-      return `MOTS-CLÉS LONGUE TRAÎNE AVEC VOLUMES RÉELS (priorise ceux à fort volume, intègre-les naturellement) :\n${lines.join('\n')}`;
+
+      return [
+        `═══ CLUSTER SÉMANTIQUE — ${cluster.main_keyword} (${cluster.keyword_count} mots-clés, ${cluster.total_volume} recherches/mois cumulées) ═══`,
+        `Ta page DOIT couvrir l'ensemble de ce cluster. Chaque mot-clé ci-dessous doit être intégré naturellement dans le contenu (titre, sous-titres, paragraphes, FAQ).`,
+        `Priorise les mots-clés à fort volume :\n${lines.join('\n')}`,
+      ].join('\n');
     }
 
-    // Fallback sans volumes
-    return `MOTS-CLÉS LONGUE TRAÎNE (intègre-les naturellement dans le contenu) :\n${longTail.map(k => `- "${k.keyword}"`).join('\n')}`;
+    // 2. Fallback: fetch discovered_keywords directly matching this page's service/slug
+    const kwRows = await getDiscoveredKeywords(page.siteKey, 'opportunity');
+    if (kwRows.length > 0) {
+      // Match keywords whose suggested_page matches current slug pattern
+      const serviceSlug = page.service?.slug || page.slug;
+      const matched = kwRows.filter(kw => {
+        const sp = (kw.suggested_page || '').toLowerCase().replace(/\[ville\]/g, '').replace(/-+$/g, '');
+        return serviceSlug.startsWith(sp) || sp.includes(serviceSlug);
+      });
+
+      if (matched.length > 0) {
+        const top = matched.sort((a, b) => b.score - a.score).slice(0, 15);
+        const lines = top.map(k => `- "${k.keyword}"`);
+        return `MOTS-CLÉS LONGUE TRAÎNE À COUVRIR (intègre-les naturellement) :\n${lines.join('\n')}`;
+      }
+    }
+
+    return '';
   } catch (e) {
-    logger.warn(`Keyword suggestions failed for ${page.slug}: ${(e as Error).message}`);
+    logger.warn(`Keyword context failed for ${page.slug}: ${(e as Error).message}`);
     return '';
   }
 }

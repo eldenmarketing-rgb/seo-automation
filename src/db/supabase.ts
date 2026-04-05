@@ -619,6 +619,84 @@ export async function getTopKeywordOpportunities(siteKey: string, limit = 20): P
     .slice(0, limit);
 }
 
+// --- Keyword Clusters ---
+
+export interface KeywordClusterRow {
+  id?: string;
+  site_key: string;
+  cluster_name: string;
+  main_keyword: string;
+  total_volume: number;
+  keyword_count: number;
+  keywords_list: Array<{ keyword: string; volume: number; score: number }>;
+  suggested_slug?: string;
+  status?: string;
+}
+
+/**
+ * Get keyword clusters matching a slug pattern for a site.
+ * Used by page-generator-v2 to inject all cluster keywords into the prompt.
+ */
+export async function getClusterForSlug(siteKey: string, slug: string): Promise<KeywordClusterRow | null> {
+  const db = getSupabase();
+  // Try exact match on suggested_slug first
+  const { data: exact, error: err1 } = await db
+    .from('keyword_clusters')
+    .select('*')
+    .eq('site_key', siteKey)
+    .eq('suggested_slug', slug)
+    .order('total_volume', { ascending: false })
+    .limit(1);
+  if (!err1 && exact && exact.length > 0) return exact[0] as KeywordClusterRow;
+
+  // Try matching cluster_name against slug tokens
+  const slugTokens = slug.replace(/\[ville\]/g, '').replace(/-+/g, ' ').trim();
+  if (!slugTokens) return null;
+  const { data: fuzzy, error: err2 } = await db
+    .from('keyword_clusters')
+    .select('*')
+    .eq('site_key', siteKey)
+    .ilike('cluster_name', `%${slugTokens.split(' ')[0]}%`)
+    .order('total_volume', { ascending: false })
+    .limit(5);
+  if (err2 || !fuzzy || fuzzy.length === 0) return null;
+
+  // Find best match by token overlap
+  const slugParts = new Set(slugTokens.toLowerCase().split(/\s+/));
+  let best: any = null;
+  let bestOverlap = 0;
+  for (const row of fuzzy) {
+    const clusterParts = (row.cluster_name || '').toLowerCase().split(/\s+/);
+    let overlap = 0;
+    for (const t of clusterParts) {
+      if (slugParts.has(t)) overlap++;
+    }
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      best = row;
+    }
+  }
+  return bestOverlap > 0 ? (best as KeywordClusterRow) : null;
+}
+
+/**
+ * Get top clusters for a site, used by /generate to show opportunities.
+ */
+export async function getTopClusters(siteKey: string, limit = 10): Promise<KeywordClusterRow[]> {
+  const db = getSupabase();
+  const { data, error } = await db
+    .from('keyword_clusters')
+    .select('*')
+    .eq('site_key', siteKey)
+    .order('total_volume', { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (error.message.includes('relation') && error.message.includes('does not exist')) return [];
+    throw new Error(`getTopClusters: ${error.message}`);
+  }
+  return (data || []) as KeywordClusterRow[];
+}
+
 // --- Optimization Candidates View ---
 
 export async function getOptimizationCandidates(siteKey?: string) {

@@ -1,15 +1,12 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Bot, InlineKeyboard } from 'grammy';
 import { sites } from '../../config/sites.js';
-import { cities66 } from '../../config/cities-66.js';
 import { generateMatrix, PageToGenerate } from '../generators/universal-matrix.js';
 import { getSiteModeConfig } from '../../config/site-mode-registry.js';
-import { getExistingSlugs, log, addToOptimizationQueue, upsertPendingPages, upsertDiscoveredKeywords, getTopKeywordOpportunities, PendingPageRow, DiscoveredKeywordRow, KeywordOpportunity } from '../db/supabase.js';
+import { getExistingSlugs, log, addToOptimizationQueue, upsertPendingPages, getTopKeywordOpportunities, PendingPageRow, KeywordOpportunity } from '../db/supabase.js';
 import { getExistingSlugsFromFiles } from '../deployers/inject-pages.js';
 import { notifyError, sendTelegram } from '../notifications/telegram.js';
-import { quickKeywordSuggestions, suggestPages } from '../keywords/research-v2.js';
 import { fetchGscData, GscRow } from '../gsc/client.js';
 import * as logger from '../utils/logger.js';
 
@@ -18,11 +15,6 @@ const PAGES_PER_RUN = parseInt(process.env.PAGES_PER_RUN || '5', 10);
 // Sites exclus du daily-generate
 const EXCLUDED_SITES = ['massage'];
 
-// Villes prioritaires pour la découverte de mots-clés
-const DISCOVERY_CITIES = ['perpignan', 'narbonne', 'beziers', 'montpellier', 'toulouse'];
-
-// Noms de villes connus pour le bonus scoring
-const knownCityNames = new Set(cities66.map(c => c.name.toLowerCase()));
 
 // ─── Scoring ────────────────────────────────────────────────────
 
@@ -31,61 +23,6 @@ interface ScoredPage extends PageToGenerate {
   scoreDetails: string;
 }
 
-// Google Suggest availability flag — set to false after first 403 to avoid wasting time
-let suggestAvailable: boolean | null = null; // null = not tested yet
-
-/**
- * Test if Google Suggest is reachable from this IP.
- */
-async function testSuggestAvailability(): Promise<boolean> {
-  try {
-    const res = await fetch(
-      'https://suggestqueries.google.com/complete/search?client=firefox&hl=fr&gl=fr&q=test',
-      { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' } },
-    );
-    const text = await res.text();
-    const ok = !text.startsWith('<') && res.status === 200;
-    logger.info(`Google Suggest availability: ${ok ? '✅ available' : '❌ blocked (IP banned)'}`);
-    return ok;
-  } catch {
-    logger.info('Google Suggest availability: ❌ unreachable');
-    return false;
-  }
-}
-
-/**
- * Score composite pour une page candidate.
- * Mode suggest: utilise Google Suggest count + bonuses
- * Mode heuristique: utilise zone géo + type de page + service keywords
- */
-function computeCompositeScore(suggestCount: number, keywords: string[]): { score: number; details: string } {
-  let score = Math.min(suggestCount, 10);
-  const parts: string[] = [`suggest:${suggestCount}`];
-  const allText = keywords.join(' ').toLowerCase();
-
-  if (/prix|tarif|devis|combien/.test(allText)) {
-    score += 2;
-    parts.push('transac:+2');
-  }
-  if (/urgent|nuit|dimanche|24h/.test(allText)) {
-    score += 2;
-    parts.push('urgence:+2');
-  }
-  if (/avis|meilleur|recommand/.test(allText)) {
-    score += 1;
-    parts.push('trust:+1');
-  }
-  const mentionsCity = keywords.some(kw => {
-    const lower = kw.toLowerCase();
-    return Array.from(knownCityNames).some(city => lower.includes(city));
-  });
-  if (mentionsCity) {
-    score += 1;
-    parts.push('city:+1');
-  }
-
-  return { score, details: parts.join(', ') };
-}
 
 /**
  * Score heuristique quand Google Suggest est indisponible.
@@ -128,15 +65,6 @@ function computeHeuristicScore(page: PageToGenerate): { score: number; details: 
   return { score, details: `heuristic: ${parts.join(', ')}` };
 }
 
-function scoreKeyword(keyword: string, suggestCount: number): number {
-  let score = Math.min(suggestCount, 10);
-  const lower = keyword.toLowerCase();
-  if (/prix|tarif|devis|combien/.test(lower)) score += 2;
-  if (/urgent|nuit|dimanche|24h/.test(lower)) score += 2;
-  if (/avis|meilleur|recommand/.test(lower)) score += 1;
-  if (Array.from(knownCityNames).some(city => lower.includes(city))) score += 1;
-  return score;
-}
 
 // ─── GSC Intelligence ───────────────────────────────────────────
 
@@ -173,56 +101,6 @@ function aggregateGscByPage(rows: GscRow[]): GscPageSummary[] {
   });
 }
 
-// ─── Keyword Discovery ──────────────────────────────────────────
-
-async function discoverKeywords(
-  siteKey: string,
-  topic: string,
-  existingSlugs: string[],
-  matrixSlugs: string[],
-): Promise<{ discovered: Array<{ title: string; targetKeywords: string[]; type: string; score: number }>; keywords: DiscoveredKeywordRow[] }> {
-  const allDiscovered: Array<{ title: string; targetKeywords: string[]; type: string; score: number }> = [];
-  const allKeywordRows: DiscoveredKeywordRow[] = [];
-  const allKnown = new Set([...existingSlugs, ...matrixSlugs]);
-
-  for (const city of DISCOVERY_CITIES) {
-    try {
-      const rawKeywords = await quickKeywordSuggestions(topic, city, '66');
-      const keywords = rawKeywords.map(k => ({ ...k, source: 'suggest' }));
-      const pages = suggestPages(keywords, topic, city);
-
-      for (const page of pages) {
-        const suggestedSlug = page.title
-          .toLowerCase()
-          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-
-        if (!allKnown.has(suggestedSlug)) {
-          const compositeScore = scoreKeyword(page.title, page.targetKeywords.length);
-          allDiscovered.push({ ...page, score: compositeScore });
-          allKnown.add(suggestedSlug);
-        }
-
-        for (const kw of page.targetKeywords) {
-          allKeywordRows.push({
-            site_key: siteKey,
-            keyword: kw,
-            score: scoreKeyword(kw, 1),
-            source: `discovery:${city}`,
-            suggested_page: page.title,
-          });
-        }
-      }
-
-      await new Promise(r => setTimeout(r, 300));
-    } catch (e) {
-      logger.warn(`Keyword discovery failed for ${topic} + ${city}: ${(e as Error).message}`);
-    }
-  }
-
-  return { discovered: allDiscovered, keywords: allKeywordRows };
-}
 
 // ─── Telegram Summary with Inline Keyboards ─────────────────────
 
@@ -378,128 +256,81 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
         continue;
       }
 
-      // 5. Score each candidate page
-      // Test Google Suggest availability once per run
-      if (suggestAvailable === null) {
-        suggestAvailable = await testSuggestAvailability();
-      }
-
-      const scoringMode = suggestAvailable ? 'suggest' : 'heuristic';
-      logger.info(`Scoring ${candidatePages.length} candidates (mode: ${scoringMode})...`);
+      // 5. Score from Supabase discovered_keywords — ZERO API calls
+      logger.info(`Scoring ${candidatePages.length} candidates from Supabase...`);
       const scoredPages: ScoredPage[] = [];
 
-      if (suggestAvailable) {
-        // Google Suggest mode: sequential with 500ms delay
-        for (const page of candidatePages) {
-          const topic = page.service?.name || page.site.business.split(' - ')[0];
-          const location = page.city?.name || 'Perpignan';
-
-          try {
-            const suggestions = await quickKeywordSuggestions(topic, location, '66');
-            // If first call returns 0 results, Suggest may have just been blocked
-            if (suggestions.length === 0 && scoredPages.length === 0) {
-              const recheck = await testSuggestAvailability();
-              if (!recheck) {
-                suggestAvailable = false;
-                logger.warn('Google Suggest just got blocked — switching to heuristic mode');
-                // Score this page + all remaining with heuristic
-                const { score, details } = computeHeuristicScore(page);
-                scoredPages.push({ ...page, score, scoreDetails: details });
-                break;
-              }
-            }
-            const keywordsText = suggestions.map(s => s.keyword);
-            const { score, details } = computeCompositeScore(suggestions.length, keywordsText);
-            scoredPages.push({ ...page, score, scoreDetails: details });
-            logger.info(`  [${score >= 1 ? 'OK' : 'LOW'}] ${page.slug} — score ${score} (${details})`);
-            await new Promise(r => setTimeout(r, 500));
-          } catch (e) {
-            scoredPages.push({ ...page, score: 0, scoreDetails: 'error' });
-            logger.warn(`  [ERR] ${page.slug} — ${(e as Error).message}`);
-          }
-        }
-      }
-
-      if (!suggestAvailable) {
-        // Heuristic mode: instant scoring, no API calls
-        const alreadyScored = new Set(scoredPages.map(p => p.slug));
-        for (const page of candidatePages) {
-          if (alreadyScored.has(page.slug)) continue;
-          const { score, details } = computeHeuristicScore(page);
-          scoredPages.push({ ...page, score, scoreDetails: details });
-        }
-        // Log top 10 only to avoid spam
-        const topHeuristic = [...scoredPages].sort((a, b) => b.score - a.score).slice(0, 10);
-        for (const p of topHeuristic) {
-          logger.info(`  [HEUR] ${p.slug} — score ${p.score} (${p.scoreDetails})`);
-        }
-      }
-
-      // 5b. Boost scores with discovered_keywords opportunities
+      // Fetch all discovered_keywords for this site (already scored 0-100 by DataForSEO)
       let kwOpportunities: KeywordOpportunity[] = [];
       try {
-        kwOpportunities = await getTopKeywordOpportunities(siteKey, 50);
-        if (kwOpportunities.length > 0) {
-          logger.info(`Discovered keywords: ${kwOpportunities.length} page opportunities found`);
+        kwOpportunities = await getTopKeywordOpportunities(siteKey, 200);
+      } catch (e) {
+        logger.warn(`Failed to fetch keyword opportunities: ${(e as Error).message}`);
+      }
 
-          // Build a map: normalized slug pattern → opportunity
-          const oppMap = new Map<string, KeywordOpportunity>();
-          for (const opp of kwOpportunities) {
-            // Handle patterns like "entretien-[ville]" → match any "entretien-*" slug
-            const baseSlug = opp.suggested_page
-              .replace(/^NEW:\s*/, '')
-              .replace(/\[ville\]/g, '')
-              .replace(/-+$/g, '')
-              .toLowerCase();
-            oppMap.set(baseSlug, opp);
-          }
+      // Build slug-pattern → opportunity map
+      const oppMap = new Map<string, KeywordOpportunity>();
+      for (const opp of kwOpportunities) {
+        const baseSlug = opp.suggested_page
+          .replace(/^NEW:\s*/, '')
+          .replace(/\[ville\]/g, '')
+          .replace(/-+$/g, '')
+          .toLowerCase();
+        oppMap.set(baseSlug, opp);
+      }
+      logger.info(`Keyword opportunities: ${kwOpportunities.length} page patterns from Supabase`);
 
-          // Boost matrix candidates that match keyword opportunities
-          for (const page of scoredPages) {
-            for (const [baseSlug, opp] of Array.from(oppMap.entries())) {
-              if (page.slug.startsWith(baseSlug) || page.slug === baseSlug) {
-                // Normalize discovered score (0-100) to a boost (0-5)
-                const boost = Math.round((opp.best_score / 100) * 5);
-                page.score += boost;
-                page.scoreDetails += `, kw-boost:+${boost}(${opp.keyword_count}kw,best:${opp.best_score})`;
-                logger.info(`  [KW-BOOST] ${page.slug} +${boost} (${opp.keyword_count} keywords, best: ${opp.best_score})`);
-                break;
-              }
-            }
-          }
+      // Score each matrix candidate: heuristic base + Supabase keyword boost
+      for (const page of candidatePages) {
+        const { score: baseScore, details: baseDetails } = computeHeuristicScore(page);
+        let totalScore = baseScore;
+        let details = baseDetails;
 
-          // Add NEW page ideas not in matrix as extra candidates
-          for (const opp of kwOpportunities) {
-            if (!opp.suggested_page.startsWith('NEW:')) continue;
-            const newSlug = opp.suggested_page
-              .replace(/^NEW:\s*/, '')
-              .toLowerCase()
-              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-              .replace(/[^a-z0-9]+/g, '-')
-              .replace(/^-|-$/g, '');
-
-            // Skip if already in matrix or existing
-            if (existingSlugs.includes(newSlug)) continue;
-            if (scoredPages.some(p => p.slug === newSlug)) continue;
-
-            const boost = Math.round((opp.best_score / 100) * 5);
-            const modeConfig = getSiteModeConfig(siteKey);
-            const newPage: ScoredPage = {
-              siteKey,
-              slug: newSlug,
-              pageType: 'topic_intent',
-              intent: 'guide',
-              site: site,
-              modeConfig,
-              score: 3 + boost, // base 3 + keyword boost
-              scoreDetails: `kw-new:${opp.best_score}(${opp.keyword_count}kw: ${opp.top_keywords.slice(0, 3).join(', ')})`,
-            };
-            scoredPages.push(newPage);
-            logger.info(`  [KW-NEW] ${newSlug} — score ${newPage.score} (${opp.keyword_count} keywords)`);
+        // Match against keyword opportunities
+        for (const [baseSlug, opp] of Array.from(oppMap.entries())) {
+          if (page.slug.startsWith(baseSlug) || page.slug === baseSlug) {
+            // Scale discovered score (0-100) to boost (0-10)
+            const boost = Math.round((opp.best_score / 100) * 10);
+            totalScore += boost;
+            details += `, kw:+${boost}(${opp.keyword_count}kw,best:${opp.best_score})`;
+            break;
           }
         }
-      } catch (e) {
-        logger.warn(`Keyword opportunities fetch failed: ${(e as Error).message}`);
+
+        scoredPages.push({ ...page, score: totalScore, scoreDetails: details });
+      }
+
+      // Add NEW page ideas from keywords not in matrix
+      for (const opp of kwOpportunities) {
+        if (!opp.suggested_page.startsWith('NEW:')) continue;
+        const newSlug = opp.suggested_page
+          .replace(/^NEW:\s*/, '')
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+
+        if (existingSlugs.includes(newSlug)) continue;
+        if (scoredPages.some(p => p.slug === newSlug)) continue;
+
+        const kwScore = Math.round((opp.best_score / 100) * 10);
+        const modeConfig = getSiteModeConfig(siteKey);
+        scoredPages.push({
+          siteKey,
+          slug: newSlug,
+          pageType: 'topic_intent',
+          intent: 'guide',
+          site: site,
+          modeConfig,
+          score: 3 + kwScore,
+          scoreDetails: `kw-new:${opp.best_score}(${opp.keyword_count}kw: ${opp.top_keywords.slice(0, 3).join(', ')})`,
+        });
+      }
+
+      // Log top 10
+      const topScored = [...scoredPages].sort((a, b) => b.score - a.score).slice(0, 10);
+      for (const p of topScored) {
+        logger.info(`  [${p.score >= 5 ? 'TOP' : 'OK'}] ${p.slug} — score ${p.score} (${p.scoreDetails})`);
       }
 
       // 6. Filter score >= 1, limit to PAGES_PER_RUN, sort by score desc
@@ -531,7 +362,6 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
           logger.success(`Stored ${stored} pages in pending_pages`);
 
           // 8. Send Telegram approval message
-          // Re-fetch to get the UUIDs
           const { getSupabase } = await import('../db/supabase.js');
           const db = getSupabase();
           const { data: storedPages } = await db
@@ -548,47 +378,13 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
         }
       }
 
-      // 9. Keyword discovery (skip if Suggest is blocked)
-      let discoveredCount = 0;
-      if (!suggestAvailable) {
-        logger.info('Skipping keyword discovery (Google Suggest blocked)');
-      } else try {
-        const topic = site.business.split(' - ')[0].toLowerCase();
-        const matrixSlugs = matrix.map(p => p.slug);
-        const { discovered, keywords: kwRows } = await discoverKeywords(siteKey, topic, existingSlugs, matrixSlugs);
-
-        if (kwRows.length > 0) {
-          const stored = await upsertDiscoveredKeywords(kwRows);
-          if (stored === -1) {
-            logger.warn('discovered_keywords table not found');
-          } else {
-            discoveredCount = stored;
-            logger.info(`Discovery: ${kwRows.length} keywords, ${discovered.length} page ideas`);
-          }
-        }
-
-        if (discovered.length > 0) {
-          const topDisc = discovered.sort((a, b) => b.score - a.score).slice(0, 5);
-          const discMsg = topDisc.map(d => `  • ${d.title} (score: ${d.score})`).join('\n');
-          await sendTelegram(
-            `<b>🔍 Mots-clés découverts — ${siteKey}</b>\n\n` +
-            `${discovered.length} idées de pages:\n${discMsg}\n\n` +
-            `${kwRows.length} mots-clés stockés`,
-            siteKey
-          );
-        }
-      } catch (e) {
-        logger.warn(`Discovery failed for ${siteKey}: ${(e as Error).message}`);
-      }
-
       const duration = Date.now() - siteStart;
-      const kwBoostedCount = kwOpportunities.length;
       allResults[siteKey] = {
         scored: scoredPages.length,
         pending: qualifiedPages.length,
         queued: queuedForOptimization,
-        discovered: discoveredCount,
-        kwBoosted: kwBoostedCount,
+        discovered: 0,
+        kwBoosted: kwOpportunities.length,
         errors: 0,
       };
 
@@ -596,7 +392,7 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
         scored: scoredPages.length,
         pending: qualifiedPages.length,
         queued: queuedForOptimization,
-        discovered: discoveredCount,
+        kwBoosted: kwOpportunities.length,
         batchId,
         topScores: qualifiedPages.slice(0, 5).map(p => ({ slug: p.slug, score: p.score, details: p.scoreDetails })),
       }, duration);
@@ -615,24 +411,24 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
   const totalScored = Object.values(allResults).reduce((s, r) => s + r.scored, 0);
   const totalPending = Object.values(allResults).reduce((s, r) => s + r.pending, 0);
   const totalQueued = Object.values(allResults).reduce((s, r) => s + r.queued, 0);
-  const totalDiscovered = Object.values(allResults).reduce((s, r) => s + r.discovered, 0);
+  const totalKwBoosted = Object.values(allResults).reduce((s, r) => s + r.kwBoosted, 0);
   const totalErrors = Object.values(allResults).reduce((s, r) => s + r.errors, 0);
 
   logger.info('\n=== Summary ===');
-  logger.info(`Scored: ${totalScored} | Pending approval: ${totalPending} | Queued optim: ${totalQueued} | Discovered: ${totalDiscovered} | Errors: ${totalErrors}`);
+  logger.info(`Scored: ${totalScored} | Pending: ${totalPending} | Queued optim: ${totalQueued} | KW-boosted: ${totalKwBoosted} | Errors: ${totalErrors}`);
   logger.info(`Duration: ${(totalDuration / 1000).toFixed(1)}s`);
 
   for (const [key, r] of Object.entries(allResults)) {
-    logger.info(`  ${key}: scored=${r.scored} pending=${r.pending} queue=${r.queued} disc=${r.discovered} err=${r.errors}`);
+    logger.info(`  ${key}: scored=${r.scored} pending=${r.pending} queue=${r.queued} kw=${r.kwBoosted} err=${r.errors}`);
   }
 
   await log('daily-generate', 'Completed (scoring only)', 'info', undefined, {
-    totalScored, totalPending, totalQueued, totalDiscovered, totalErrors,
+    totalScored, totalPending, totalQueued, totalKwBoosted, totalErrors,
     batchId,
     sites: allResults,
   }, totalDuration);
 
-  return { totalScored, totalPending, totalQueued, totalDiscovered, totalErrors, batchId, duration: totalDuration, sites: allResults };
+  return { totalScored, totalPending, totalQueued, totalKwBoosted, totalErrors, batchId, duration: totalDuration, sites: allResults };
 }
 
 // Run directly if called as script
