@@ -76,42 +76,204 @@ export async function injectPages(siteKey: string, pages: SeoPageRow[]): Promise
   }
 }
 
-// ─── GARAGE: Append to data/cities.ts ──────────────────────
+// ─── GARAGE: Inject city pages + merge service pages ────────
 
 function injectGaragePages(site: SiteConfig, pages: SeoPageRow[]): string[] {
   const injected: string[] = [];
-  const cityPages = pages.filter(p => p.page_type === 'city' || p.page_type === 'city_service');
 
-  if (cityPages.length === 0) return [];
+  // Split by type
+  const cityHubs = pages.filter(p => p.page_type === 'city');
+  const servicePages = pages.filter(p => p.page_type === 'city_service');
 
-  const filePath = `${site.projectPath}/data/cities.ts`;
-  let content = readFileSync(filePath, 'utf-8');
+  // 1. City hubs → data/cities.ts (append new)
+  if (cityHubs.length > 0) {
+    const citiesPath = `${site.projectPath}/data/cities.ts`;
+    let citiesContent = readFileSync(citiesPath, 'utf-8');
 
-  for (const page of cityPages) {
-    if (content.includes(`slug: "${page.slug}"`)) {
-      logger.warn(`Slug "${page.slug}" already exists in ${filePath}, skipping`);
-      continue;
+    for (const page of cityHubs) {
+      if (citiesContent.includes(`slug: "${page.slug}"`)) {
+        logger.warn(`City slug "${page.slug}" already exists, skipping`);
+        continue;
+      }
+      const c = page.content as Record<string, unknown>;
+      const entry = generateGarageCityEntry(page, c);
+      const replaced = citiesContent.replace(/\n\];\s*(\n|$)/, `\n${entry}\n];\n`);
+      if (replaced === citiesContent) {
+        logger.warn(`Could not find array closing for ${page.slug} in cities.ts`);
+        continue;
+      }
+      citiesContent = replaced;
+      injected.push(page.slug);
     }
 
-    const c = page.content as Record<string, unknown>;
-    const entry = generateGarageCityEntry(page, c);
-    // Insert before the closing bracket of the array (may have exports after)
-    const replaced = content.replace(/\n\];\s*(\n|$)/, `\n${entry}\n];\n`);
-    if (replaced === content) {
-      logger.warn(`Could not find array closing for ${page.slug} in ${filePath}`);
-      continue;
-    }
-    content = replaced;
-    injected.push(page.slug);
+    writeFileSync(citiesPath, citiesContent, 'utf-8');
+    logger.success(`Injected ${cityHubs.length} city hubs into cities.ts`);
   }
 
-  writeFileSync(filePath, content, 'utf-8');
-  logger.success(`Injected ${injected.length} city pages into ${filePath}`);
+  // 2. Service pages → data/services.ts (merge existing or append new)
+  if (servicePages.length > 0) {
+    const servicesPath = `${site.projectPath}/data/services.ts`;
+    let servicesContent = readFileSync(servicesPath, 'utf-8');
 
-  // Also update next-sitemap.config.js with new pages
+    for (const page of servicePages) {
+      const c = page.content as Record<string, unknown>;
+
+      if (servicesContent.includes(`slug: "${page.slug}"`)) {
+        // MERGE: replace SEO fields, keep static fields (process, brands, etc.)
+        servicesContent = mergeGarageServiceEntry(servicesContent, page, c);
+        injected.push(page.slug);
+        logger.info(`Merged service: ${page.slug}`);
+      } else {
+        // NEW service page — append with defaults
+        const entry = generateGarageServiceEntry(page, c);
+        const replaced = servicesContent.replace(/\n\];\s*(\n|$)/, `\n${entry}\n];\n`);
+        if (replaced === servicesContent) {
+          logger.warn(`Could not find array closing for ${page.slug} in services.ts`);
+          continue;
+        }
+        servicesContent = replaced;
+        injected.push(page.slug);
+        logger.info(`Appended new service: ${page.slug}`);
+      }
+    }
+
+    writeFileSync(servicesPath, servicesContent, 'utf-8');
+    logger.success(`Injected/merged ${servicePages.length} service pages into services.ts`);
+  }
+
   updateSitemap(site, injected);
-
   return injected;
+}
+
+/** Map internalLinks label→anchor for garage compatibility */
+function mapLinksToAnchors(links: Array<{ slug: string; label?: string; anchor?: string }>): Array<{ slug: string; anchor: string }> {
+  return links.map(l => ({
+    slug: l.slug,
+    anchor: l.anchor || l.label || l.slug,
+  }));
+}
+
+/** Merge SEO content into an existing service entry in services.ts */
+function mergeGarageServiceEntry(fileContent: string, page: SeoPageRow, c: Record<string, unknown>): string {
+  const slug = page.slug;
+
+  // Find the object block for this slug using brace counting
+  const slugMarker = `slug: "${slug}"`;
+  const markerIdx = fileContent.indexOf(slugMarker);
+  if (markerIdx === -1) return fileContent;
+
+  // Walk backwards to find the opening { of this object
+  let objStart = markerIdx;
+  while (objStart > 0 && fileContent[objStart] !== '{') objStart--;
+
+  // Walk forward from objStart to find matching closing }
+  let depth = 0;
+  let objEnd = objStart;
+  for (let i = objStart; i < fileContent.length; i++) {
+    if (fileContent[i] === '{') depth++;
+    else if (fileContent[i] === '}') {
+      depth--;
+      if (depth === 0) { objEnd = i; break; }
+    }
+  }
+
+  const originalBlock = fileContent.slice(objStart, objEnd + 1);
+
+  // Extract static fields we want to KEEP from the original
+  const extractField = (name: string): string | null => {
+    // Match field: value (handles multiline arrays/objects)
+    const regex = new RegExp(`${name}:\\s*`);
+    const match = regex.exec(originalBlock);
+    if (!match) return null;
+    const start = match.index + match[0].length;
+    // Find the value end — handle arrays, objects, strings
+    const firstChar = originalBlock[start];
+    if (firstChar === '[' || firstChar === '{') {
+      let d = 0;
+      const close = firstChar === '[' ? ']' : '}';
+      const open = firstChar;
+      for (let i = start; i < originalBlock.length; i++) {
+        if (originalBlock[i] === open) d++;
+        else if (originalBlock[i] === close) { d--; if (d === 0) return originalBlock.slice(start, i + 1); }
+      }
+    }
+    if (firstChar === '"') {
+      const end = originalBlock.indexOf('"', start + 1);
+      return originalBlock.slice(start, end + 1);
+    }
+    // Simple value until comma or newline
+    const endMatch = originalBlock.slice(start).match(/^[^,\n]+/);
+    return endMatch ? endMatch[0].trim() : null;
+  };
+
+  const name = extractField('name') || JSON.stringify(page.service || '');
+  const emoji = extractField('emoji') || '"🔧"';
+  const category = extractField('category') || '"entretien"';
+  const canonical = extractField('canonical') || JSON.stringify('/' + slug);
+  const heroImage = extractField('heroImage');
+  const educationalTitle = extractField('educationalTitle') || JSON.stringify((c.seoSections as any)?.[0]?.title || '');
+  const educationalContent = extractField('educationalContent') || JSON.stringify((c.seoSections as any)?.[0]?.content || '');
+  const process = extractField('process') || '[]';
+  const brands = extractField('brands') || '[]';
+  const ctaTitle = extractField('ctaTitle') || JSON.stringify(`Besoin de ${page.service} à ${page.city} ? Appelez-nous`);
+  const schemaService = extractField('schemaService') || `{ name: ${JSON.stringify(page.meta_title)}, description: ${JSON.stringify(page.meta_description)} }`;
+
+  const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
+  const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
+  const rawLinks = (c.internalLinks as Array<{ slug: string; label?: string; anchor?: string }>) || [];
+  const internalLinks = mapLinksToAnchors(rawLinks);
+
+  const newBlock = `{ slug: ${JSON.stringify(slug)}, name: ${name}, emoji: ${emoji}, category: ${category},
+    metaTitle: ${JSON.stringify(page.meta_title)},
+    metaDescription: ${JSON.stringify(page.meta_description)},
+    canonical: ${canonical}, h1: ${JSON.stringify(page.h1)},
+    heroTitle: ${JSON.stringify(c.heroTitle || page.h1)},
+    heroSubtitle: ${JSON.stringify(c.heroSubtitle || '')},${heroImage ? `\n    heroImage: ${heroImage},` : ''}
+    intro: ${JSON.stringify(c.intro || '')},
+    educationalTitle: ${educationalTitle},
+    educationalContent: ${educationalContent},
+    process: ${process},
+    brands: ${brands},
+    ctaTitle: ${ctaTitle},
+    faq: ${JSON.stringify(faq, null, 6)},
+    seoSections: ${JSON.stringify(seoSections, null, 6)},
+    internalLinks: ${JSON.stringify(internalLinks, null, 6)},
+    schemaService: ${schemaService},
+  }`;
+
+  return fileContent.slice(0, objStart) + newBlock + fileContent.slice(objEnd + 1);
+}
+
+/** Generate a new service entry (for services not yet in services.ts) */
+function generateGarageServiceEntry(page: SeoPageRow, c: Record<string, unknown>): string {
+  const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
+  const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
+  const rawLinks = (c.internalLinks as Array<{ slug: string; label?: string; anchor?: string }>) || [];
+  const internalLinks = mapLinksToAnchors(rawLinks);
+
+  return `
+  // ── ${page.service || page.slug} (auto-generated) ──────────────
+  { slug: ${JSON.stringify(page.slug)}, name: ${JSON.stringify(page.service || '')}, emoji: "🔧", category: "entretien",
+    metaTitle: ${JSON.stringify(page.meta_title)},
+    metaDescription: ${JSON.stringify(page.meta_description)},
+    canonical: ${JSON.stringify('/' + page.slug)}, h1: ${JSON.stringify(page.h1)},
+    heroTitle: ${JSON.stringify(c.heroTitle || page.h1)},
+    heroSubtitle: ${JSON.stringify(c.heroSubtitle || '')},
+    intro: ${JSON.stringify(c.intro || '')},
+    educationalTitle: ${JSON.stringify((seoSections[0] || {}).title || '')},
+    educationalContent: ${JSON.stringify((seoSections[0] || {}).content || '')},
+    process: [
+      { icon: "📞", title: "Prise de rendez-vous", description: "Appelez-nous ou venez directement." },
+      { icon: "🔧", title: "Intervention", description: "Diagnostic et intervention par nos techniciens." },
+      { icon: "✅", title: "Restitution", description: "Rapport détaillé et facturation transparente." },
+    ],
+    brands: ["Renault","Peugeot","Citroën","Volkswagen","BMW","Mercedes","Toyota","Dacia","Hyundai","Kia","Ford","Opel","Fiat","Nissan","Honda"],
+    ctaTitle: ${JSON.stringify(`Besoin de ${page.service} à ${page.city} ? Appelez-nous`)},
+    faq: ${JSON.stringify(faq, null, 6)},
+    seoSections: ${JSON.stringify(seoSections, null, 6)},
+    internalLinks: ${JSON.stringify(internalLinks, null, 6)},
+    schemaService: { name: ${JSON.stringify(page.meta_title)}, description: ${JSON.stringify(page.meta_description)} },
+  },`;
 }
 
 function generateGarageCityEntry(page: SeoPageRow, c: Record<string, unknown>): string {
@@ -120,6 +282,8 @@ function generateGarageCityEntry(page: SeoPageRow, c: Record<string, unknown>): 
   const highlights = (c.highlights as string[]) || [];
   const nearbyPlaces = (c.nearbyPlaces as string[]) || [];
   const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
+  const rawLinks = (c.internalLinks as Array<{ slug: string; label?: string; anchor?: string }>) || [];
+  const internalLinks = mapLinksToAnchors(rawLinks);
 
   return `
   // ── ${page.city || page.slug} (auto-generated) ──────────────
@@ -149,7 +313,7 @@ function generateGarageCityEntry(page: SeoPageRow, c: Record<string, unknown>): 
     highlights: ${JSON.stringify(highlights, null, 6)},
     nearbyPlaces: ${JSON.stringify(nearbyPlaces, null, 6)},
     linkedServices: ${JSON.stringify(
-      featuredServices.slice(0, 4).map(s => s.slug),
+      internalLinks.slice(0, 4).map(l => l.slug),
       null,
       6,
     )},
