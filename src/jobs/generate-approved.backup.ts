@@ -3,9 +3,8 @@ dotenv.config();
 
 import { sites } from '../../config/sites.js';
 import { cities66 } from '../../config/cities-66.js';
-import { UniversalPage } from '../../config/site-modes.js';
-import { getSiteModeConfig } from '../../config/site-mode-registry.js';
-import { generateBatch } from '../generators/page-generator-v2.js';
+import { PageToGenerate } from '../generators/city-service-matrix.js';
+import { generateBatch } from '../generators/page-generator.js';
 import { upsertSeoPage, markPagesDeployed, log, getPendingPages, updatePendingPageStatus, PendingPageRow } from '../db/supabase.js';
 import { injectPages } from '../deployers/inject-pages.js';
 import { triggerDeploy } from '../deployers/vercel-deploy.js';
@@ -14,42 +13,27 @@ import { requestBulkIndexation } from '../deployers/indexing.js';
 import * as logger from '../utils/logger.js';
 
 /**
- * Reconstruct a UniversalPage from a PendingPageRow.
+ * Reconstruct a PageToGenerate from a PendingPageRow.
  */
-function toPTG(row: PendingPageRow): UniversalPage | null {
+function toPTG(row: PendingPageRow): PageToGenerate | null {
   const site = sites[row.site_key];
   if (!site) return null;
 
-  const modeConfig = getSiteModeConfig(row.site_key);
-
-  const cityData = row.city_slug
+  const city = row.city_slug
     ? cities66.find(c => c.slug === row.city_slug)
     : undefined;
 
-  const serviceData = row.service_slug
-    ? site.services.find((s: any) => s.slug === row.service_slug)
+  const service = row.service_slug
+    ? site.services.find(s => s.slug === row.service_slug)
     : undefined;
 
   return {
     siteKey: row.site_key,
     site,
-    pageType: row.page_type as UniversalPage['pageType'],
+    pageType: row.page_type,
     slug: row.slug,
-    intent: (row as any).intent || 'service',
-    modeConfig,
-    city: cityData ? {
-      name: cityData.name,
-      slug: cityData.slug,
-      postalCode: cityData.postalCode,
-      distanceFromBase: cityData.distanceFromPerpignan,
-      population: cityData.population,
-      department: '66',
-    } : undefined,
-    service: serviceData ? {
-      name: serviceData.name,
-      slug: serviceData.slug,
-      keywords: serviceData.keywords,
-    } : undefined,
+    service,
+    city,
   };
 }
 
@@ -75,7 +59,7 @@ export async function generateApprovedForSite(siteKey: string): Promise<{ genera
   }
 
   // Reconstruct PageToGenerate objects
-  const batch: UniversalPage[] = [];
+  const batch: PageToGenerate[] = [];
   for (const row of approvedRows) {
     const ptg = toPTG(row);
     if (ptg) batch.push(ptg);

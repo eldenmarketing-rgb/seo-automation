@@ -18,7 +18,8 @@
     "dotenv": "^16.4.7",
     "googleapis": "^146.0.0",
     "grammy": "^1.41.1",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

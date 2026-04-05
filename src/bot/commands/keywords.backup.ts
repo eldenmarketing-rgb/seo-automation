@@ -1,6 +1,6 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { BotContext } from '../index.js';
-import { researchKeywords, formatKeywordsForTelegram, suggestPages } from '../../keywords/research-v2.js';
+import { researchKeywords, formatKeywordsForTelegram, suggestPages } from '../../keywords/research.js';
 
 export function registerKeywordsCommand(bot: Bot<BotContext>) {
   // /keywords taxi

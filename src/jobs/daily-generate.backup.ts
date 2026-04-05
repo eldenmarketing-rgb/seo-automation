@@ -4,11 +4,11 @@ dotenv.config();
 import { Bot, InlineKeyboard } from 'grammy';
 import { sites } from '../../config/sites.js';
 import { cities66 } from '../../config/cities-66.js';
-import { generateMatrix, PageToGenerate } from '../generators/universal-matrix.js';
+import { generateMatrix, PageToGenerate } from '../generators/city-service-matrix.js';
 import { getExistingSlugs, log, addToOptimizationQueue, upsertPendingPages, upsertDiscoveredKeywords, PendingPageRow, DiscoveredKeywordRow } from '../db/supabase.js';
 import { getExistingSlugsFromFiles } from '../deployers/inject-pages.js';
 import { notifyError, sendTelegram } from '../notifications/telegram.js';
-import { quickKeywordSuggestions, suggestPages } from '../keywords/research-v2.js';
+import { quickKeywordSuggestions, researchKeywords, suggestPages } from '../keywords/research.js';
 import { fetchGscData, GscRow } from '../gsc/client.js';
 import * as logger from '../utils/logger.js';
 
@@ -94,21 +94,18 @@ function computeHeuristicScore(page: PageToGenerate): { score: number; details: 
   let score = 0;
   const parts: string[] = [];
 
-  // Géographie : utilise population et slug pour estimer la priorité
-  const citySlug = page.city?.slug;
-  const pop = page.city?.population || 0;
-  if (citySlug === 'perpignan') { score += 5; parts.push('zone:perpignan+5'); }
-  else if (pop > 10000) { score += 4; parts.push('zone:big+4'); }
-  else if (pop > 5000) { score += 3; parts.push('zone:medium+3'); }
-  else if (pop > 2000) { score += 2; parts.push('zone:small+2'); }
+  // Zone géographique : perpignan > proche > périphérie > éloigné
+  const zone = page.city?.zone;
+  if (zone === 'perpignan') { score += 5; parts.push('zone:perpignan+5'); }
+  else if (zone === 'proche') { score += 4; parts.push('zone:proche+4'); }
+  else if (zone === 'peripherie') { score += 3; parts.push('zone:periph+3'); }
+  else if (zone === 'eloigne') { score += 2; parts.push('zone:eloigne+2'); }
   else { score += 1; parts.push('zone:other+1'); }
 
-  // Type de page : city_service > city > topic > product
-  if (page.pageType === 'city_service') { score += 3; parts.push('type:city_svc+3'); }
-  else if (page.pageType === 'city') { score += 2; parts.push('type:city+2'); }
-  else if (page.pageType === 'topic' || page.pageType === 'topic_intent') { score += 2; parts.push('type:topic+2'); }
-  else if (page.pageType === 'product') { score += 1; parts.push('type:product+1'); }
-  else { score += 1; parts.push('type:other+1'); }
+  // Type de page : service > city_service > city
+  if (page.pageType === 'service') { score += 2; parts.push('type:service+2'); }
+  else if (page.pageType === 'city_service') { score += 3; parts.push('type:city_svc+3'); }
+  else { score += 1; parts.push('type:city+1'); }
 
   // Service transactionnel : certains services ont plus de valeur
   const highValueServices = ['vidange', 'freins', 'embrayage', 'climatisation', 'pneus', 'diagnostic', 'controle-technique'];
@@ -186,8 +183,7 @@ async function discoverKeywords(
 
   for (const city of DISCOVERY_CITIES) {
     try {
-      const rawKeywords = await quickKeywordSuggestions(topic, city, '66');
-      const keywords = rawKeywords.map(k => ({ ...k, source: 'suggest' }));
+      const keywords = await quickKeywordSuggestions(topic, city, '66');
       const pages = suggestPages(keywords, topic, city);
 
       for (const page of pages) {

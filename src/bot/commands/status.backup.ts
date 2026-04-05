@@ -1,7 +1,7 @@
 import { Bot } from 'grammy';
 import type { BotContext } from '../index.js';
 import { sites } from '../../../config/sites.js';
-import { getMatrixStats } from '../../generators/universal-matrix.js';
+import { getMatrixStats } from '../../generators/city-service-matrix.js';
 import { getExistingSlugs } from '../../db/supabase.js';
 import { getExistingSlugsFromFiles } from '../../deployers/inject-pages.js';
 

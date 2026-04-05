@@ -20,7 +20,7 @@ export function getSupabase(): SupabaseClient {
 export interface SeoPageRow {
   id?: string;
   site_key: string;
-  page_type: 'city' | 'service' | 'city_service' | 'topic' | 'topic_intent' | 'product' | 'category';
+  page_type: 'city' | 'service' | 'city_service';
   slug: string;
   city?: string;
   service?: string;
@@ -34,8 +34,6 @@ export interface SeoPageRow {
   deployed_at?: string;
   created_at?: string;
   updated_at?: string;
-  intent?: string;
-  mode?: string;
 }
 
 export async function upsertSeoPage(page: SeoPageRow) {
@@ -439,7 +437,7 @@ export interface PendingPageRow {
   id?: string;
   site_key: string;
   slug: string;
-  page_type: 'city' | 'service' | 'city_service' | 'topic' | 'topic_intent' | 'product' | 'category';
+  page_type: 'city' | 'service' | 'city_service';
   service_slug?: string;
   city_slug?: string;
   score: number;

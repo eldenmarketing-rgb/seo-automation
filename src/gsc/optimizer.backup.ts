@@ -1,5 +1,5 @@
 import { getPendingOptimizations, updateOptimizationStatus, upsertSeoPage, getSupabase } from '../db/supabase.js';
-import { generateOptimizedContent } from '../generators/page-generator-v2.js';
+import { generateOptimizedContent } from '../generators/page-generator.js';
 import { injectPages } from '../deployers/inject-pages.js';
 import { triggerDeploy } from '../deployers/vercel-deploy.js';
 import * as logger from '../utils/logger.js';
