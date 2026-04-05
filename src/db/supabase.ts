@@ -565,6 +565,60 @@ export async function getDiscoveredKeywords(siteKey: string, status?: string) {
   return data as DiscoveredKeywordRow[];
 }
 
+/**
+ * Get top keyword opportunities grouped by suggested_page.
+ * Returns pages sorted by best keyword score, with keyword count and top keywords.
+ */
+export interface KeywordOpportunity {
+  suggested_page: string;
+  best_score: number;
+  keyword_count: number;
+  top_keywords: string[];
+  site_key: string;
+}
+
+export async function getTopKeywordOpportunities(siteKey: string, limit = 20): Promise<KeywordOpportunity[]> {
+  const db = getSupabase();
+  const { data, error } = await db
+    .from('discovered_keywords')
+    .select('keyword, score, suggested_page')
+    .eq('site_key', siteKey)
+    .in('status', ['opportunity', 'new'])
+    .order('score', { ascending: false })
+    .limit(500);
+  if (error) {
+    if (error.message.includes('relation') && error.message.includes('does not exist')) return [];
+    throw new Error(`getTopKeywordOpportunities: ${error.message}`);
+  }
+  if (!data || data.length === 0) return [];
+
+  // Group by suggested_page
+  const byPage = new Map<string, { scores: number[]; keywords: string[] }>();
+  for (const row of data) {
+    const page = row.suggested_page || 'unknown';
+    const entry = byPage.get(page) || { scores: [], keywords: [] };
+    entry.scores.push(row.score);
+    entry.keywords.push(row.keyword);
+    byPage.set(page, entry);
+  }
+
+  // Aggregate and sort
+  const opportunities: KeywordOpportunity[] = [];
+  for (const [page, { scores, keywords }] of Array.from(byPage.entries())) {
+    opportunities.push({
+      suggested_page: page,
+      best_score: Math.max(...scores),
+      keyword_count: keywords.length,
+      top_keywords: keywords.slice(0, 5),
+      site_key: siteKey,
+    });
+  }
+
+  return opportunities
+    .sort((a, b) => b.best_score - a.best_score || b.keyword_count - a.keyword_count)
+    .slice(0, limit);
+}
+
 // --- Optimization Candidates View ---
 
 export async function getOptimizationCandidates(siteKey?: string) {

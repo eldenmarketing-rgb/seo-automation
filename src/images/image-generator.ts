@@ -38,12 +38,12 @@ const API_URL = 'https://api.together.xyz/v1/images/generations';
 // Modèle par défaut — Krea Dev pour le photoréalisme
 const DEFAULT_MODEL = process.env.FLUX_MODEL || 'black-forest-labs/FLUX.1-krea-dev';
 
-// Fallback gratuit
-const FREE_MODEL = 'black-forest-labs/FLUX.1-schnell-Free';
+// Fallback rapide
+const FREE_MODEL = 'black-forest-labs/FLUX.1-schnell';
 
 // Dimensions optimisées SEO (16:9 pour hero, 4:3 pour contenu)
 const IMAGE_SIZES = {
-  hero: { width: 1200, height: 675 },     // 16:9
+  hero: { width: 1200, height: 672 },     // ~16:9 (multiple of 8)
   content: { width: 800, height: 600 },    // 4:3
   square: { width: 800, height: 800 },     // 1:1
 } as const;

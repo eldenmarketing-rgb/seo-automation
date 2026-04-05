@@ -3,7 +3,7 @@ import type { BotContext } from '../index.js';
 import { sites } from '../../../config/sites.js';
 import { dailyGenerate } from '../../jobs/daily-generate.js';
 import { generateApprovedForSite } from '../../jobs/generate-approved.js';
-import { getPendingPages } from '../../db/supabase.js';
+import { getPendingPages, getTopKeywordOpportunities } from '../../db/supabase.js';
 import * as logger from '../../utils/logger.js';
 
 // Track if a generation is already running
@@ -40,8 +40,26 @@ export function registerGenerateCommand(bot: Bot<BotContext>) {
         statusLine = `\n\n📋 En attente: ${pending.length} | ✅ Approuvées: ${approved.length}\nTape /approve pour gérer les pages en attente.`;
       }
 
+      // Show top keyword opportunities across all sites
+      let kwLine = '';
+      try {
+        const allOpps: Array<{ site: string; page: string; score: number; kws: number }> = [];
+        for (const key of Object.keys(sites)) {
+          const opps = await getTopKeywordOpportunities(key, 3);
+          for (const o of opps) {
+            allOpps.push({ site: key, page: o.suggested_page, score: o.best_score, kws: o.keyword_count });
+          }
+        }
+        if (allOpps.length > 0) {
+          allOpps.sort((a, b) => b.score - a.score);
+          const top5 = allOpps.slice(0, 5);
+          kwLine = `\n\n🔑 <b>Top opportunités mots-clés:</b>\n` +
+            top5.map(o => `  • <code>${o.page}</code> (${o.site}) — score ${o.score}, ${o.kws} kw`).join('\n');
+        }
+      } catch { /* ignore */ }
+
       await ctx.reply(
-        `Quel site scorer ?${statusLine}\n\n<i>Le scoring propose des pages, tu approuves via /approve, puis on génère.</i>`,
+        `Quel site scorer ?${statusLine}${kwLine}\n\n<i>Le scoring utilise les mots-clés découverts + matrice pour proposer les meilleures pages.</i>`,
         { parse_mode: 'HTML', reply_markup: keyboard }
       );
       return;
@@ -84,7 +102,8 @@ async function runScoring(ctx: BotContext, siteKey: string, count?: number) {
     if (result) {
       const lines = [`<b>Scoring terminé</b> (${(result.duration / 1000).toFixed(0)}s)\n`];
       for (const [key, r] of Object.entries(result.sites)) {
-        lines.push(`  <b>${key}</b>: ${r.scored} scorées, ${r.pending} en attente, ${r.queued} en file optim`);
+        const kwInfo = r.kwBoosted ? `, 🔑 ${r.kwBoosted} kw-boosts` : '';
+        lines.push(`  <b>${key}</b>: ${r.scored} scorées, ${r.pending} en attente, ${r.queued} en file optim${kwInfo}`);
       }
       lines.push(`\nTotal en attente: ${result.totalPending} pages`);
       if (result.totalPending > 0) {

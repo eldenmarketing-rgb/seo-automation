@@ -5,7 +5,8 @@ import { Bot, InlineKeyboard } from 'grammy';
 import { sites } from '../../config/sites.js';
 import { cities66 } from '../../config/cities-66.js';
 import { generateMatrix, PageToGenerate } from '../generators/universal-matrix.js';
-import { getExistingSlugs, log, addToOptimizationQueue, upsertPendingPages, upsertDiscoveredKeywords, PendingPageRow, DiscoveredKeywordRow } from '../db/supabase.js';
+import { getSiteModeConfig } from '../../config/site-mode-registry.js';
+import { getExistingSlugs, log, addToOptimizationQueue, upsertPendingPages, upsertDiscoveredKeywords, getTopKeywordOpportunities, PendingPageRow, DiscoveredKeywordRow, KeywordOpportunity } from '../db/supabase.js';
 import { getExistingSlugsFromFiles } from '../deployers/inject-pages.js';
 import { notifyError, sendTelegram } from '../notifications/telegram.js';
 import { quickKeywordSuggestions, suggestPages } from '../keywords/research-v2.js';
@@ -308,12 +309,12 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
   logger.info(`Batch: ${batchId}`);
   logger.info(`Excluded sites: ${EXCLUDED_SITES.join(', ')}`);
 
-  const allResults: Record<string, { scored: number; pending: number; queued: number; discovered: number; errors: number }> = {};
+  const allResults: Record<string, { scored: number; pending: number; queued: number; discovered: number; kwBoosted: number; errors: number }> = {};
 
   for (const [siteKey, site] of Object.entries(sites)) {
     if (EXCLUDED_SITES.includes(siteKey)) {
       logger.info(`\n--- Skipping ${siteKey} (excluded) ---`);
-      allResults[siteKey] = { scored: 0, pending: 0, queued: 0, discovered: 0, errors: 0 };
+      allResults[siteKey] = { scored: 0, pending: 0, queued: 0, discovered: 0, kwBoosted: 0, errors: 0 };
       continue;
     }
 
@@ -373,7 +374,7 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
       logger.info(`Candidates: ${candidatePages.length}`);
 
       if (candidatePages.length === 0) {
-        allResults[siteKey] = { scored: 0, pending: 0, queued: queuedForOptimization, discovered: 0, errors: 0 };
+        allResults[siteKey] = { scored: 0, pending: 0, queued: queuedForOptimization, discovered: 0, kwBoosted: 0, errors: 0 };
         continue;
       }
 
@@ -432,6 +433,73 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
         for (const p of topHeuristic) {
           logger.info(`  [HEUR] ${p.slug} — score ${p.score} (${p.scoreDetails})`);
         }
+      }
+
+      // 5b. Boost scores with discovered_keywords opportunities
+      let kwOpportunities: KeywordOpportunity[] = [];
+      try {
+        kwOpportunities = await getTopKeywordOpportunities(siteKey, 50);
+        if (kwOpportunities.length > 0) {
+          logger.info(`Discovered keywords: ${kwOpportunities.length} page opportunities found`);
+
+          // Build a map: normalized slug pattern → opportunity
+          const oppMap = new Map<string, KeywordOpportunity>();
+          for (const opp of kwOpportunities) {
+            // Handle patterns like "entretien-[ville]" → match any "entretien-*" slug
+            const baseSlug = opp.suggested_page
+              .replace(/^NEW:\s*/, '')
+              .replace(/\[ville\]/g, '')
+              .replace(/-+$/g, '')
+              .toLowerCase();
+            oppMap.set(baseSlug, opp);
+          }
+
+          // Boost matrix candidates that match keyword opportunities
+          for (const page of scoredPages) {
+            for (const [baseSlug, opp] of Array.from(oppMap.entries())) {
+              if (page.slug.startsWith(baseSlug) || page.slug === baseSlug) {
+                // Normalize discovered score (0-100) to a boost (0-5)
+                const boost = Math.round((opp.best_score / 100) * 5);
+                page.score += boost;
+                page.scoreDetails += `, kw-boost:+${boost}(${opp.keyword_count}kw,best:${opp.best_score})`;
+                logger.info(`  [KW-BOOST] ${page.slug} +${boost} (${opp.keyword_count} keywords, best: ${opp.best_score})`);
+                break;
+              }
+            }
+          }
+
+          // Add NEW page ideas not in matrix as extra candidates
+          for (const opp of kwOpportunities) {
+            if (!opp.suggested_page.startsWith('NEW:')) continue;
+            const newSlug = opp.suggested_page
+              .replace(/^NEW:\s*/, '')
+              .toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-|-$/g, '');
+
+            // Skip if already in matrix or existing
+            if (existingSlugs.includes(newSlug)) continue;
+            if (scoredPages.some(p => p.slug === newSlug)) continue;
+
+            const boost = Math.round((opp.best_score / 100) * 5);
+            const modeConfig = getSiteModeConfig(siteKey);
+            const newPage: ScoredPage = {
+              siteKey,
+              slug: newSlug,
+              pageType: 'topic_intent',
+              intent: 'guide',
+              site: site,
+              modeConfig,
+              score: 3 + boost, // base 3 + keyword boost
+              scoreDetails: `kw-new:${opp.best_score}(${opp.keyword_count}kw: ${opp.top_keywords.slice(0, 3).join(', ')})`,
+            };
+            scoredPages.push(newPage);
+            logger.info(`  [KW-NEW] ${newSlug} — score ${newPage.score} (${opp.keyword_count} keywords)`);
+          }
+        }
+      } catch (e) {
+        logger.warn(`Keyword opportunities fetch failed: ${(e as Error).message}`);
       }
 
       // 6. Filter score >= 1, limit to PAGES_PER_RUN, sort by score desc
@@ -514,11 +582,13 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
       }
 
       const duration = Date.now() - siteStart;
+      const kwBoostedCount = kwOpportunities.length;
       allResults[siteKey] = {
         scored: scoredPages.length,
         pending: qualifiedPages.length,
         queued: queuedForOptimization,
         discovered: discoveredCount,
+        kwBoosted: kwBoostedCount,
         errors: 0,
       };
 
@@ -534,7 +604,7 @@ export async function dailyGenerate(pagesPerRunOverride?: number) {
     } catch (e) {
       const errMsg = (e as Error).message;
       logger.error(`Fatal error for ${siteKey}: ${errMsg}`);
-      allResults[siteKey] = { scored: 0, pending: 0, queued: 0, discovered: 0, errors: 1 };
+      allResults[siteKey] = { scored: 0, pending: 0, queued: 0, discovered: 0, kwBoosted: 0, errors: 1 };
       await log('daily-generate', `Error: ${errMsg}`, 'error', siteKey);
       await notifyError('daily-generate', `${siteKey}: ${errMsg}`, siteKey);
     }
