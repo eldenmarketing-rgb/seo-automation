@@ -215,6 +215,52 @@ export async function getKeywordIdeas(
   }
 }
 
+// ─── Related Keywords (mots-clés sémantiquement proches) ─────
+
+/**
+ * Obtenir des mots-clés sémantiquement proches d'un seed.
+ * Plus précis que keyword_ideas — reste dans le champ sémantique du seed.
+ * Coût : ~0.01$ par requête.
+ *
+ * @param seedKeyword - Un mot-clé de départ (pas une liste)
+ * @param limit - Nombre max de résultats (default 50)
+ */
+export async function getRelatedKeywords(
+  seedKeyword: string,
+  limit: number = 50
+): Promise<KeywordIdea[]> {
+  if (!seedKeyword) return [];
+
+  try {
+    const data = await callApi<any>('/dataforseo_labs/google/related_keywords/live', [{
+      keyword: seedKeyword,
+      location_code: LOCATION_CODE_FR,
+      language_code: LANGUAGE_CODE_FR,
+      include_seed_keyword: true,
+      limit,
+      order_by: ['keyword_data.keyword_info.search_volume,desc'],
+      filters: [
+        ['keyword_data.keyword_info.search_volume', '>', 0],
+      ],
+    }]);
+
+    const items = data.tasks?.[0]?.result?.[0]?.items || [];
+    const cost = data.cost || 0;
+    logger.info(`DataForSEO Related Keywords: ${items.length} results for "${seedKeyword}", cost: $${cost.toFixed(4)}`);
+
+    return items.map((item: any) => ({
+      keyword: item.keyword_data?.keyword || '',
+      searchVolume: item.keyword_data?.keyword_info?.search_volume || 0,
+      cpc: item.keyword_data?.keyword_info?.cpc || null,
+      competition: item.keyword_data?.keyword_info?.competition || null,
+      keywordDifficulty: item.keyword_data?.keyword_info?.keyword_difficulty || 0,
+    }));
+  } catch (e) {
+    logger.error(`DataForSEO Related Keywords failed: ${(e as Error).message}`);
+    return [];
+  }
+}
+
 // ─── Keywords for Site (mots-clés d'un domaine) ──────────────
 
 /**

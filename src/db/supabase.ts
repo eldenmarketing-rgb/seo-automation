@@ -530,8 +530,11 @@ export interface DiscoveredKeywordRow {
   score: number;
   source: string;
   suggested_page?: string;
-  status?: 'new' | 'approved' | 'rejected';
+  status?: 'new' | 'approved' | 'rejected' | 'opportunity' | 'covered';
   created_at?: string;
+  volume?: number;
+  cpc?: number;
+  competition?: string;
 }
 
 export async function upsertDiscoveredKeywords(rows: DiscoveredKeywordRow[]) {
@@ -617,6 +620,100 @@ export async function getTopKeywordOpportunities(siteKey: string, limit = 20): P
   return opportunities
     .sort((a, b) => b.best_score - a.best_score || b.keyword_count - a.keyword_count)
     .slice(0, limit);
+}
+
+/**
+ * Count discovered keywords per service slug pattern for a site.
+ * Returns a map of serviceSlug → keyword count.
+ */
+export async function countKeywordsByService(siteKey: string, serviceSlugs: string[]): Promise<Map<string, number>> {
+  const db = getSupabase();
+  const result = new Map<string, number>();
+
+  // Fetch all suggested_page values for this site in one query
+  const { data, error } = await db
+    .from('discovered_keywords')
+    .select('suggested_page')
+    .eq('site_key', siteKey)
+    .not('suggested_page', 'is', null);
+
+  if (error) {
+    if (error.message.includes('relation') && error.message.includes('does not exist')) {
+      for (const slug of serviceSlugs) result.set(slug, 0);
+      return result;
+    }
+    throw new Error(`countKeywordsByService: ${error.message}`);
+  }
+
+  // Count per service prefix
+  for (const slug of serviceSlugs) {
+    const count = (data || []).filter(r => r.suggested_page && r.suggested_page.startsWith(slug)).length;
+    result.set(slug, count);
+  }
+
+  return result;
+}
+
+// --- Page Keyword Scores (Supabase-only scoring) ---
+
+export interface PageKeywordScore {
+  suggested_page: string;
+  total_volume: number;
+  avg_kd: number;
+  avg_cpc: number;
+  keyword_count: number;
+  top_keywords: Array<{ keyword: string; volume: number; cpc: number; competition: string }>;
+}
+
+const KD_MAP: Record<string, number> = { LOW: 20, MEDIUM: 50, HIGH: 80 };
+
+/**
+ * Get keyword scores aggregated by suggested_page for a site.
+ * Used by daily-generate to score candidates purely from Supabase data.
+ * Returns pages sorted by total_volume DESC, avg_kd ASC.
+ */
+export async function getPageKeywordScores(siteKey: string): Promise<PageKeywordScore[]> {
+  const db = getSupabase();
+  const { data, error } = await db
+    .from('discovered_keywords')
+    .select('keyword, volume, cpc, competition, suggested_page')
+    .eq('site_key', siteKey)
+    .not('suggested_page', 'is', null)
+    .order('volume', { ascending: false });
+
+  if (error) {
+    if (error.message.includes('relation') && error.message.includes('does not exist')) return [];
+    throw new Error(`getPageKeywordScores: ${error.message}`);
+  }
+  if (!data || data.length === 0) return [];
+
+  // Group by suggested_page
+  const byPage = new Map<string, { volumes: number[]; kds: number[]; cpcs: number[]; keywords: Array<{ keyword: string; volume: number; cpc: number; competition: string }> }>();
+
+  for (const row of data) {
+    const page = row.suggested_page;
+    if (!page) continue;
+    const entry = byPage.get(page) || { volumes: [], kds: [], cpcs: [], keywords: [] };
+    entry.volumes.push(row.volume || 0);
+    entry.kds.push(KD_MAP[row.competition] || 50);
+    entry.cpcs.push(row.cpc || 0);
+    entry.keywords.push({ keyword: row.keyword, volume: row.volume || 0, cpc: row.cpc || 0, competition: row.competition || '' });
+    byPage.set(page, entry);
+  }
+
+  const results: PageKeywordScore[] = [];
+  for (const [page, d] of byPage.entries()) {
+    results.push({
+      suggested_page: page,
+      total_volume: d.volumes.reduce((a, b) => a + b, 0),
+      avg_kd: Math.round(d.kds.reduce((a, b) => a + b, 0) / d.kds.length),
+      avg_cpc: Math.round((d.cpcs.reduce((a, b) => a + b, 0) / d.cpcs.length) * 100) / 100,
+      keyword_count: d.keywords.length,
+      top_keywords: d.keywords.sort((a, b) => b.volume - a.volume).slice(0, 5),
+    });
+  }
+
+  return results.sort((a, b) => b.total_volume - a.total_volume || a.avg_kd - b.avg_kd);
 }
 
 // --- Keyword Clusters ---
