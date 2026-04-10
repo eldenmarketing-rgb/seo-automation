@@ -8,6 +8,7 @@
     "generate": "tsx src/jobs/daily-generate.ts",
     "audit": "tsx src/jobs/weekly-gsc-audit.ts",
     "optimize": "tsx src/jobs/monthly-optimize.ts",
+    "cluster": "tsx src/jobs/weekly-clustering.ts",
     "run": "tsx scripts/run.ts",
     "test-telegram": "tsx src/notifications/telegram.ts",
     "bot": "tsx src/bot/index.ts"

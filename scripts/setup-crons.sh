@@ -33,6 +33,9 @@ cat >> /tmp/crontab_clean << EOF
 # Weekly GSC audit (Monday 8:00 AM) $MARKER
 0 8 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/weekly-gsc-audit.ts >> $LOG_FILE 2>&1 $MARKER
 
+# Weekly keyword clustering (Sunday 10:00 PM) $MARKER
+0 22 * * 0 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/weekly-clustering.ts >> $LOG_FILE 2>&1 $MARKER
+
 # Monthly content optimization (1st of month, 10:00 AM) $MARKER
 0 10 1 * * cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/monthly-optimize.ts >> $LOG_FILE 2>&1 $MARKER
 
