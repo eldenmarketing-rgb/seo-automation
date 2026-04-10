@@ -20,6 +20,7 @@ import { registerVoitureCommand } from './commands/voiture.js';
 import { registerProduitCommand } from './commands/produit.js';
 import { registerClaudeCommand } from './commands/claude.js';
 import { registerApproveCommand } from './commands/approve.js';
+import { registerEnrichirCommand } from './commands/enrichir.js';
 import { checkUptime } from '../monitoring/uptime.js';
 import { isAuthorized, isAdmin, getSiteForChat } from './permissions.js';
 
@@ -53,7 +54,7 @@ bot.use(async (ctx, next) => {
 });
 
 // Admin-only command guard — groups can only use /voiture, /help
-const ADMIN_ONLY_COMMANDS = ['status', 'generate', 'phone', 'blog', 'monitor', 'deploy', 'seo', 'keywords', 'edit', 'index', 'ctr', 'ping', 'claude', 'approve'];
+const ADMIN_ONLY_COMMANDS = ['status', 'generate', 'phone', 'blog', 'monitor', 'deploy', 'seo', 'keywords', 'edit', 'index', 'ctr', 'ping', 'claude', 'approve', 'enrichir', 'done'];
 bot.use(async (ctx, next) => {
   if (ctx.message?.text?.startsWith('/')) {
     const cmd = ctx.message.text.split(/[\s@]/)[0].slice(1).toLowerCase();
@@ -84,6 +85,7 @@ registerVoitureCommand(bot);
 registerProduitCommand(bot);
 registerClaudeCommand(bot);
 registerApproveCommand(bot);
+registerEnrichirCommand(bot);
 
 // Catch-all for unknown messages
 bot.on('message:text', async (ctx) => {

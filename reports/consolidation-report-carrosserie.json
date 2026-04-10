@@ -1,0 +1,165 @@
+{
+  "site_key": "carrosserie",
+  "site_domain": "https://carrossier-pro.fr",
+  "total_pages": 30,
+  "pages_kept": 17,
+  "consolidation_groups": [
+    {
+      "service": "carrossier",
+      "service_name": "Carrossier (city pages)",
+      "winner_slug": "carrosserie/perpignan",
+      "winner_page_id": "7d960874-fde7-48e8-8872-6cd6fc761cc2",
+      "winner_status": "published",
+      "redirect_pages": [
+        {
+          "slug": "carrossier-thuir",
+          "city": "Thuir",
+          "page_id": "b7d5962d-f614-4e46-83ed-35efffec0086",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-canet-en-roussillon",
+          "city": "Canet-en-Roussillon",
+          "page_id": "adaa1185-91fc-441c-81b8-1941f45aa036",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-elne",
+          "city": "Elne",
+          "page_id": "2eb92f23-d67e-47db-afee-5f3097cb5e40",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-rivesaltes",
+          "city": "Rivesaltes",
+          "page_id": "076b5e1a-87ec-4233-a3da-72c92ba5202c",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-pollestres",
+          "city": "Pollestres",
+          "page_id": "9e99b74c-2c3b-44eb-80fd-162ddc477f64",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-le-soler",
+          "city": "Le Soler",
+          "page_id": "a12792f5-5d60-4fc7-8183-2c1ab975a2a7",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-toulouges",
+          "city": "Toulouges",
+          "page_id": "7871e7b9-40a0-4f5a-bf8f-9165ae6bcab8",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-canohes",
+          "city": "Canohès",
+          "page_id": "5097b066-2f20-43af-b9ae-3aa51047b8e7",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-bompas",
+          "city": "Bompas",
+          "page_id": "1c5983c1-aa29-4b3a-828b-077c92a69e6d",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-saleilles",
+          "city": "Saleilles",
+          "page_id": "33768b25-2c8b-42db-b379-1926a39a2a58",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-pia",
+          "city": "Pia",
+          "page_id": "40f95b70-56e1-46ff-8be6-226c78d8e81a",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-cabestany",
+          "city": "Cabestany",
+          "page_id": "4cad211c-04d5-4376-a6f0-3ef91931e296",
+          "status": "draft"
+        },
+        {
+          "slug": "carrossier-saint-esteve",
+          "city": "Saint-Estève",
+          "page_id": "1064e10d-1b11-44bd-b24e-a0f38dd2f760",
+          "status": "draft"
+        }
+      ],
+      "zones_section": "Nous intervenons a Perpignan, Bompas (7 min), Cabestany (5 min), Canohès (8 min), Claira (10 min), Le Soler (10 min), Pia (8 min), Pollestres (10 min), Saint-Estève (7 min), Saleilles (8 min), Toulouges (8 min), Argelès-sur-Mer (20 min), Canet-en-Roussillon (12 min), Elne (14 min), Le Barcarès (18 min), Rivesaltes (12 min), Saint-Cyprien (15 min), Saint-Laurent-de-la-Salanque (15 min), Thuir (15 min), Céret (30 min), Collioure (25 min), Ille-sur-Têt (25 min), Prades (35 min).",
+      "redirects": [
+        {
+          "source": "/carrossier-thuir",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-canet-en-roussillon",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-elne",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-rivesaltes",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-pollestres",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-le-soler",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-toulouges",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-canohes",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-bompas",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-saleilles",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-pia",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-cabestany",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/carrossier-saint-esteve",
+          "destination": "/carrosserie/perpignan",
+          "permanent": true
+        }
+      ]
+    }
+  ],
+  "total_redirects": 13,
+  "generated_at": "2026-04-10T15:39:25.688Z"
+}

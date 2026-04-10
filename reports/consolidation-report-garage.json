@@ -1,0 +1,286 @@
+{
+  "site_key": "garage",
+  "site_domain": "https://garage-perpignan.fr",
+  "total_pages": 43,
+  "pages_kept": 19,
+  "consolidation_groups": [
+    {
+      "service": "garage",
+      "service_name": "Garage (city pages)",
+      "winner_slug": "perpignan",
+      "winner_page_id": "16fa36cf-e2f8-4e99-8732-78f917beddc0",
+      "winner_status": "published",
+      "redirect_pages": [
+        {
+          "slug": "garage-le-soler",
+          "city": "Le Soler",
+          "page_id": "4ce26aa3-a6a3-4d19-b300-9f846e839aec",
+          "status": "published"
+        },
+        {
+          "slug": "garage-elne",
+          "city": "Elne",
+          "page_id": "63bb98cf-fbf9-49c9-b5e3-dc27fa395a3b",
+          "status": "published"
+        },
+        {
+          "slug": "garage-pollestres",
+          "city": "Pollestres",
+          "page_id": "2d386db4-1324-4c8c-bc84-1898f3e36fe3",
+          "status": "published"
+        },
+        {
+          "slug": "garage-toulouges",
+          "city": "Toulouges",
+          "page_id": "bcecf46e-db78-4ad9-af09-f2dbb44a7908",
+          "status": "published"
+        },
+        {
+          "slug": "garage-thuir",
+          "city": "Thuir",
+          "page_id": "72b5e27a-1c2c-4f04-8d52-8bc0a332869f",
+          "status": "published"
+        },
+        {
+          "slug": "garage-rivesaltes",
+          "city": "Rivesaltes",
+          "page_id": "a8477774-68ec-485d-b00a-d71b8fcb5c52",
+          "status": "published"
+        },
+        {
+          "slug": "garage-collioure",
+          "city": "Collioure",
+          "page_id": "38647f31-38ea-44a8-a48d-de5648a24305",
+          "status": "published"
+        },
+        {
+          "slug": "garage-saint-cyprien",
+          "city": "Saint-Cyprien",
+          "page_id": "5bfcac53-2379-4c68-9ebb-fb1609e1a7e2",
+          "status": "published"
+        },
+        {
+          "slug": "garage-le-barcares",
+          "city": "Le Barcarès",
+          "page_id": "66793b6a-52d6-4279-a54b-9d08ea2fad4c",
+          "status": "published"
+        },
+        {
+          "slug": "garage-saint-laurent-de-la-salanque",
+          "city": "Saint-Laurent-de-la-Salanque",
+          "page_id": "2e43fe45-347f-490f-84bf-c110e8036371",
+          "status": "published"
+        },
+        {
+          "slug": "garage-argeles-sur-mer",
+          "city": "Argelès-sur-Mer",
+          "page_id": "3d9fdb69-98e0-4616-b085-9a8937591820",
+          "status": "published"
+        },
+        {
+          "slug": "garage-canet-en-roussillon",
+          "city": "Canet-en-Roussillon",
+          "page_id": "7a3145ed-a492-4fa5-80c1-b906ab730064",
+          "status": "published"
+        },
+        {
+          "slug": "garage-canohes",
+          "city": "Canohès",
+          "page_id": "ae2cfee2-0f40-4861-a6e8-ae9399acd7d6",
+          "status": "published"
+        },
+        {
+          "slug": "garage-claira",
+          "city": "Claira",
+          "page_id": "b54283cf-ea6a-41f4-8d0a-e14fe9aefc13",
+          "status": "published"
+        },
+        {
+          "slug": "garage-saleilles",
+          "city": "Saleilles",
+          "page_id": "8c2f9888-4c02-440f-a2ee-8efd0a3ee9ba",
+          "status": "published"
+        },
+        {
+          "slug": "garage-bompas",
+          "city": "Bompas",
+          "page_id": "a23deac4-657b-4765-987e-9df7a359dee6",
+          "status": "published"
+        },
+        {
+          "slug": "garage-pia",
+          "city": "Pia",
+          "page_id": "bc24f510-cd9b-485c-a4eb-3e2509272198",
+          "status": "published"
+        },
+        {
+          "slug": "garage-saint-esteve",
+          "city": "Saint-Estève",
+          "page_id": "498e70e6-0986-4d12-8afa-91d99280a33f",
+          "status": "published"
+        },
+        {
+          "slug": "garage-cabestany",
+          "city": "Cabestany",
+          "page_id": "32b8408e-6aae-494a-98ee-718d139aa1b9",
+          "status": "published"
+        },
+        {
+          "slug": "cabestany",
+          "city": "Cabestany",
+          "page_id": "7a5a1bc0-79fe-42d4-ab24-1ae3af88e0b6",
+          "status": "published"
+        },
+        {
+          "slug": "saint-cyprien",
+          "city": "Saint-Cyprien",
+          "page_id": "db66b9ed-9226-4b8e-a7d6-f2c129b19134",
+          "status": "published"
+        },
+        {
+          "slug": "saint-esteve",
+          "city": "Saint-Estève",
+          "page_id": "fcf3d930-3965-4d94-bd42-9e5df0567810",
+          "status": "published"
+        },
+        {
+          "slug": "canet-en-roussillon",
+          "city": "Canet-en-Roussillon",
+          "page_id": "0db76e1d-445e-48fd-9b5f-c5c8ae571d38",
+          "status": "published"
+        },
+        {
+          "slug": "garage-canet",
+          "city": "Canet",
+          "page_id": "c3de9cc6-da4b-4b77-b8c9-b0dd45792674",
+          "status": "published"
+        }
+      ],
+      "zones_section": "Nous intervenons a Perpignan, Bompas (7 min), Cabestany (5 min), Canohès (8 min), Claira (10 min), Le Soler (10 min), Pia (8 min), Pollestres (10 min), Saint-Estève (7 min), Saleilles (8 min), Toulouges (8 min), Argelès-sur-Mer (20 min), Canet-en-Roussillon (12 min), Elne (14 min), Le Barcarès (18 min), Rivesaltes (12 min), Saint-Cyprien (15 min), Saint-Laurent-de-la-Salanque (15 min), Thuir (15 min), Céret (30 min), Collioure (25 min), Ille-sur-Têt (25 min), Port-Vendres (28 min), Prades (35 min).",
+      "redirects": [
+        {
+          "source": "/garage-le-soler",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-elne",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-pollestres",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-toulouges",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-thuir",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-rivesaltes",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-collioure",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-saint-cyprien",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-le-barcares",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-saint-laurent-de-la-salanque",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-argeles-sur-mer",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-canet-en-roussillon",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-canohes",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-claira",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-saleilles",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-bompas",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-pia",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-saint-esteve",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-cabestany",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/cabestany",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/saint-cyprien",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/saint-esteve",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/canet-en-roussillon",
+          "destination": "/perpignan",
+          "permanent": true
+        },
+        {
+          "source": "/garage-canet",
+          "destination": "/perpignan",
+          "permanent": true
+        }
+      ]
+    }
+  ],
+  "total_redirects": 24,
+  "generated_at": "2026-04-10T15:42:55.508Z"
+}
