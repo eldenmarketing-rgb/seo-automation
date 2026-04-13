@@ -3,15 +3,17 @@ dotenv.config();
 
 import Anthropic from '@anthropic-ai/sdk';
 import { sites, ServiceDef } from '../../config/sites.js';
-import { generateMatrix, PageToGenerate } from '../generators/universal-matrix.js';
 import { getSiteModeConfig } from '../../config/site-mode-registry.js';
+import { UniversalPage } from '../../config/site-modes.js';
+import { intentToPageIntent } from '../keywords/intent-classifier.js';
+import type { SearchIntent } from '../keywords/intent-classifier.js';
 import {
-  getExistingSlugs, log, upsertPendingPages, getPageKeywordScores,
-  PageKeywordScore, PendingPageRow, upsertDiscoveredKeywords,
-  DiscoveredKeywordRow, countKeywordsByService,
+  getSupabase, log, upsertSeoPage, upsertDiscoveredKeywords,
+  DiscoveredKeywordRow, countKeywordsByService, KeywordClusterRow,
 } from '../db/supabase.js';
-import { getExistingSlugsFromFiles } from '../deployers/inject-pages.js';
+import { generatePageContent } from '../generators/page-generator-v2.js';
 import { getSearchVolume, KeywordData } from '../keywords/dataforseo.js';
+import { filterCannibalized } from '../qa/cannibalization.js';
 import { notifyError } from '../notifications/telegram.js';
 import * as logger from '../utils/logger.js';
 
@@ -53,12 +55,10 @@ async function generateSeedsWithClaude(
     }],
   });
 
-  // Extract JSON from response
   const text = response.content[0].type === 'text' ? response.content[0].text : '';
   const jsonMatch = text.match(/\[[\s\S]*?\]/);
   if (!jsonMatch) {
     logger.warn(`Claude returned non-JSON for ${service.slug}: ${text.slice(0, 100)}`);
-    // Fallback: use service keywords as seeds
     return service.keywords.slice(0, 10);
   }
 
@@ -110,7 +110,6 @@ function computeDiscoveryScore(kw: KeywordData): number {
 
 /**
  * Expand Claude seeds with common SEO variations.
- * Returns deduped list of keywords to send to getSearchVolume.
  */
 function expandSeeds(seeds: string[], serviceName: string): string[] {
   const variations = new Set<string>();
@@ -119,7 +118,6 @@ function expandSeeds(seeds: string[], serviceName: string): string[] {
     variations.add(seed.toLowerCase());
   }
 
-  // Add "prix/tarif/avis" variants for the service name
   const base = serviceName.toLowerCase();
   for (const prefix of ['prix', 'tarif', 'avis', 'meilleur']) {
     variations.add(`${prefix} ${base}`);
@@ -140,22 +138,17 @@ interface DiscoveryResult {
 
 /**
  * Auto-discover keywords for services that have < 10 keywords in discovered_keywords.
- * Uses Claude for smart seed generation + DataForSEO for keyword expansion.
- *
- * Limits: max 3 services per run, max 5 DataForSEO calls per run.
  */
 async function autoDiscoverKeywords(dryRun: boolean): Promise<DiscoveryResult> {
   const result: DiscoveryResult = { servicesProcessed: 0, keywordsDiscovered: 0, dataforseoCalls: 0, details: [] };
 
-  // Check DataForSEO credentials
   if (!process.env.DATAFORSEO_LOGIN || !process.env.DATAFORSEO_PASSWORD) {
     logger.warn('Auto-discovery: DataForSEO not configured, skipping');
     return result;
   }
 
-  logger.info('\n=== Auto-Discovery Phase ===');
+  logger.info('\n=== Phase 1: Auto-Discovery ===');
 
-  // Collect all services needing discovery across all sites
   const servicesToDiscover: Array<{ siteKey: string; siteName: string; business: string; service: ServiceDef; currentCount: number }> = [];
 
   for (const [siteKey, site] of Object.entries(sites)) {
@@ -167,13 +160,7 @@ async function autoDiscoverKeywords(dryRun: boolean): Promise<DiscoveryResult> {
     for (const service of site.services) {
       const count = counts.get(service.slug) || 0;
       if (count < MIN_KEYWORDS_THRESHOLD) {
-        servicesToDiscover.push({
-          siteKey,
-          siteName: site.name,
-          business: site.business,
-          service,
-          currentCount: count,
-        });
+        servicesToDiscover.push({ siteKey, siteName: site.name, business: site.business, service, currentCount: count });
       }
     }
   }
@@ -183,61 +170,40 @@ async function autoDiscoverKeywords(dryRun: boolean): Promise<DiscoveryResult> {
     return result;
   }
 
-  // Sort: fewest keywords first (most urgent), then by site
   servicesToDiscover.sort((a, b) => a.currentCount - b.currentCount);
-
   logger.info(`Auto-discovery: ${servicesToDiscover.length} services need keywords (processing max ${MAX_SERVICES_PER_RUN})`);
-  for (const s of servicesToDiscover.slice(0, 10)) {
-    logger.info(`  ${s.siteKey}/${s.service.slug}: ${s.currentCount} keywords`);
-  }
 
-  // Process up to MAX_SERVICES_PER_RUN
   for (const entry of servicesToDiscover.slice(0, MAX_SERVICES_PER_RUN)) {
-    if (result.dataforseoCalls >= MAX_DATAFORSEO_CALLS_PER_RUN) {
-      logger.warn('Auto-discovery: DataForSEO call limit reached, stopping');
-      break;
-    }
+    if (result.dataforseoCalls >= MAX_DATAFORSEO_CALLS_PER_RUN) break;
 
     const svcLabel = `${entry.siteKey}/${entry.service.slug}`;
     logger.info(`\n  [DISCOVER] ${svcLabel} (${entry.currentCount} existing keywords)`);
 
     try {
-      // Step 1: Claude generates 10 smart seeds
-      logger.info(`    Asking Claude for seeds...`);
       const seeds = await generateSeedsWithClaude(entry.siteKey, entry.siteName, entry.service);
       logger.info(`    Claude seeds (${seeds.length}): ${seeds.join(' | ')}`);
 
       if (dryRun) {
-        logger.info('    [DRY RUN] Would call DataForSEO with these seeds');
         result.details.push({ siteKey: entry.siteKey, service: entry.service.slug, seeds, keywords: 0 });
         result.servicesProcessed++;
         continue;
       }
 
-      // Step 2: Expand seeds + DataForSEO getSearchVolume (exact volumes)
-      // Seeds are national (no city) — Claude generated them, all are relevant by construction
       if (result.dataforseoCalls >= MAX_DATAFORSEO_CALLS_PER_RUN) {
-        logger.warn('    DataForSEO call limit reached, skipping');
         result.details.push({ siteKey: entry.siteKey, service: entry.service.slug, seeds, keywords: 0 });
         result.servicesProcessed++;
         continue;
       }
 
       const allKeywords = expandSeeds(seeds, entry.service.name);
-      logger.info(`    Seeds expanded: ${seeds.length} → ${allKeywords.length} keywords`);
-
-      logger.info(`    DataForSEO getSearchVolume: ${allKeywords.length} keywords`);
       const volumeMap = await getSearchVolume(allKeywords);
       result.dataforseoCalls++;
 
-      // Filter: keep only keywords with volume > 0
       const ideas: KeywordData[] = [];
       for (const [, kwData] of volumeMap) {
         if (kwData.searchVolume > 0) ideas.push(kwData);
       }
       ideas.sort((a, b) => b.searchVolume - a.searchVolume);
-
-      logger.info(`    DataForSEO: ${allKeywords.length} queried → ${ideas.length} with volume > 0`);
 
       if (ideas.length === 0) {
         result.details.push({ siteKey: entry.siteKey, service: entry.service.slug, seeds, keywords: 0 });
@@ -245,10 +211,8 @@ async function autoDiscoverKeywords(dryRun: boolean): Promise<DiscoveryResult> {
         continue;
       }
 
-      // Step 3: Build suggested_page slug (service-perpignan as default)
       const suggestedPage = `${entry.service.slug}-perpignan`;
-
-      // Step 4: Store in discovered_keywords
+      const { classifyIntent } = await import('../keywords/intent-classifier.js');
       const rows: DiscoveredKeywordRow[] = ideas.map(kw => ({
         site_key: entry.siteKey,
         keyword: kw.keyword,
@@ -259,6 +223,7 @@ async function autoDiscoverKeywords(dryRun: boolean): Promise<DiscoveryResult> {
         volume: kw.searchVolume,
         cpc: kw.cpc || 0,
         competition: kw.competition || '',
+        intent_type: kw.intent || classifyIntent(kw.keyword),
       }));
 
       const stored = await upsertDiscoveredKeywords(rows);
@@ -268,14 +233,8 @@ async function autoDiscoverKeywords(dryRun: boolean): Promise<DiscoveryResult> {
       result.details.push({ siteKey: entry.siteKey, service: entry.service.slug, seeds, keywords: storedCount });
 
       logger.success(`    Stored ${storedCount} keywords for ${svcLabel}`);
-
-      // Log to Supabase
       await log('auto-discovery', `${svcLabel}: ${storedCount} keywords from ${seeds.length} seeds`, 'success', entry.siteKey, {
-        service: entry.service.slug,
-        seeds,
-        ideasReturned: ideas.length,
-        stored: storedCount,
-        topKeywords: ideas.slice(0, 5).map(kw => ({ kw: kw.keyword, vol: kw.searchVolume })),
+        service: entry.service.slug, seeds, ideasReturned: ideas.length, stored: storedCount,
       });
 
     } catch (e) {
@@ -286,125 +245,110 @@ async function autoDiscoverKeywords(dryRun: boolean): Promise<DiscoveryResult> {
   }
 
   logger.info(`\nAuto-discovery done: ${result.servicesProcessed} services | ${result.keywordsDiscovered} keywords | ${result.dataforseoCalls} DataForSEO calls`);
-
   return result;
 }
 
 
-// ─── Scoring Supabase-only ──────────────────────────────────
-
-interface ScoredPage extends PageToGenerate {
-  score: number;
-  totalVolume: number;
-  avgKd: number;
-  avgCpc: number;
-  keywordCount: number;
-  scoreDetails: string;
-}
-
+// ─── Phase 2: Generate from Approved Clusters ────────────────
 
 /**
- * Match a matrix page slug against discovered_keywords suggested_page entries.
- * Handles patterns like "vidange-perpignan" matching "vidange-perpignan" or partial prefixes.
+ * Fetch clusters with status='approved' from keyword_clusters.
+ * These are the clusters approved via the SEO dashboard pipeline.
  */
-function findKeywordMatch(slug: string, kwScores: Map<string, PageKeywordScore>): PageKeywordScore | undefined {
-  // Exact match
-  if (kwScores.has(slug)) return kwScores.get(slug);
+async function getApprovedClusters(limit: number): Promise<KeywordClusterRow[]> {
+  const db = getSupabase();
+  const { data, error } = await db
+    .from('keyword_clusters')
+    .select('*')
+    .eq('status', 'approved')
+    .order('total_volume', { ascending: false })
+    .limit(limit);
 
-  // Try base service slug matching (e.g. page "vidange-canet-en-roussillon" → match "vidange-perpignan" base "vidange")
-  const slugParts = slug.split('-');
-  for (const [kwSlug, kwScore] of kwScores) {
-    const kwBase = kwSlug.split('-').slice(0, -1).join('-'); // Remove city from suggested_page
-    const pageBase = slugParts.slice(0, -1).join('-');       // Remove city from page slug
+  if (error) {
+    if (error.message.includes('relation') && error.message.includes('does not exist')) return [];
+    throw new Error(`getApprovedClusters: ${error.message}`);
+  }
+  return (data || []) as KeywordClusterRow[];
+}
 
-    // Service base matches (e.g. both start with "vidange" or "climatisation-auto")
-    if (kwBase && pageBase && kwBase === pageBase) return kwScore;
+/**
+ * Update a cluster's status in keyword_clusters.
+ */
+async function updateClusterStatus(clusterId: string, status: string): Promise<void> {
+  const db = getSupabase();
+  const { error } = await db
+    .from('keyword_clusters')
+    .update({ status })
+    .eq('id', clusterId);
+  if (error) logger.warn(`Failed to update cluster ${clusterId} status: ${error.message}`);
+}
+
+/**
+ * Build a UniversalPage from a keyword cluster.
+ * Maps the cluster's dominant intent + site config to a proper page definition.
+ */
+function clusterToPage(cluster: KeywordClusterRow): UniversalPage | null {
+  const site = sites[cluster.site_key];
+  if (!site) {
+    logger.warn(`Unknown site_key: ${cluster.site_key}`);
+    return null;
   }
 
-  return undefined;
-}
+  const modeConfig = getSiteModeConfig(cluster.site_key);
 
+  // Determine slug from cluster
+  const slug = cluster.suggested_slug || cluster.main_keyword
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
-// ─── Telegram Summary with Inline Keyboards ─────────────────
+  // Determine intent from cluster dominant_intent
+  const searchIntent = (cluster.dominant_intent || 'transactional') as SearchIntent;
+  const intent = intentToPageIntent(searchIntent, cluster.main_keyword);
 
-/**
- * Send a Telegram message with scored pages and approval buttons.
- */
-async function sendApprovalMessage(
-  siteKey: string,
-  siteName: string,
-  pages: Array<PendingPageRow & { id: string }>,
-  batchId: string,
-): Promise<void> {
-  if (pages.length === 0) return;
-
-  const top = pages.slice(0, 15);
-  const lines = top.map((p, i) =>
-    `${i + 1}. <code>${p.slug}</code> — score <b>${p.score}</b>\n   <i>${p.score_details || ''}</i>`
+  // Find matching service from site config
+  const mainKwLower = cluster.main_keyword.toLowerCase();
+  const matchedService = site.services.find(s =>
+    mainKwLower.includes(s.slug.replace(/-/g, ' ')) ||
+    s.keywords.some(k => mainKwLower.includes(k.toLowerCase()))
   );
-  if (pages.length > 15) {
-    lines.push(`\n<i>... et ${pages.length - 15} autres</i>`);
-  }
 
-  const msg =
-    `<b>📋 Pages proposées — ${siteName}</b>\n` +
-    `<b>${pages.length} pages</b> (batch: ${batchId})\n\n` +
-    lines.join('\n') +
-    `\n\n` +
-    `Utilise les boutons pour approuver/rejeter, ou tape /approve`;
+  // Build keywords list from cluster
+  const clusterKeywords = (cluster.keywords_list || []).map(k => k.keyword);
 
-  // Build inline keyboard
-  const keyboard: Array<Array<{ text: string; callback_data: string }>> = [];
+  const page: UniversalPage = {
+    siteKey: cluster.site_key,
+    slug,
+    pageType: 'topic_intent',
+    intent,
+    service: matchedService ? {
+      name: matchedService.name,
+      slug: matchedService.slug,
+      keywords: [...matchedService.keywords, ...clusterKeywords],
+      parentService: matchedService.category,
+    } : {
+      name: cluster.cluster_name,
+      slug,
+      keywords: clusterKeywords,
+    },
+    site,
+    modeConfig,
+  };
 
-  for (const p of top.slice(0, 8)) {
-    keyboard.push([
-      { text: `✅ ${p.slug.slice(0, 25)}`, callback_data: `pa:${p.id}` },
-      { text: `❌`, callback_data: `pr:${p.id}` },
-    ]);
-  }
-
-  keyboard.push([
-    { text: `✅ Tout valider (${pages.length})`, callback_data: `paa:${siteKey}` },
-    { text: `❌ Tout rejeter`, callback_data: `pra:${siteKey}` },
-  ]);
-
-  keyboard.push([
-    { text: `🚀 Générer les approuvées`, callback_data: `pgo:${siteKey}` },
-  ]);
-
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-  if (!BOT_TOKEN || !ADMIN_CHAT_ID) return;
-
-  try {
-    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: ADMIN_CHAT_ID,
-        text: msg,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: keyboard },
-      }),
-    });
-  } catch (e) {
-    logger.warn(`Failed to send approval message for ${siteKey}: ${(e as Error).message}`);
-  }
+  return page;
 }
 
-// ─── Main Job — Auto-Discover → Score → Store ───────────────
+
+// ─── Main Job ────────────────────────────────────────────────
 
 export async function dailyGenerate(pagesPerRunOverride?: number, dryRun = false) {
   const PAGES_PER_RUN_LOCAL = pagesPerRunOverride ?? PAGES_PER_RUN;
   const startTime = Date.now();
-  const batchId = `batch-${new Date().toISOString().slice(0, 10)}-${Date.now().toString(36)}`;
 
-  logger.info('=== Daily SEO Pipeline (Auto-Discover → Score → Store) ===');
-  logger.info(`Target: ${PAGES_PER_RUN_LOCAL} pages per site`);
+  logger.info('=== Daily SEO Pipeline (Discover → Generate Approved) ===');
+  logger.info(`Target: ${PAGES_PER_RUN_LOCAL} pages max`);
   if (dryRun) logger.info('MODE: DRY RUN — no writes');
-  logger.info(`Batch: ${batchId}`);
   logger.info(`Excluded sites: ${EXCLUDED_SITES.join(', ')}`);
 
   // ─── Phase 1: Auto-Discovery ────────────────────────────────
@@ -415,189 +359,133 @@ export async function dailyGenerate(pagesPerRunOverride?: number, dryRun = false
     logger.error(`Auto-discovery crashed: ${(e as Error).message}`);
   }
 
-  // ─── Phase 2: Scoring & Pending Pages ───────────────────────
-  const allResults: Record<string, { scored: number; pending: number; errors: number }> = {};
+  // ─── Phase 2: Generate from Approved Clusters ─────────────────
+  logger.info('\n=== Phase 2: Generate Approved Clusters ===');
 
-  for (const [siteKey, site] of Object.entries(sites)) {
-    if (EXCLUDED_SITES.includes(siteKey)) {
-      logger.info(`\n--- Skipping ${siteKey} (excluded) ---`);
-      allResults[siteKey] = { scored: 0, pending: 0, errors: 0 };
-      continue;
+  const approvedClusters = await getApprovedClusters(PAGES_PER_RUN_LOCAL);
+
+  if (approvedClusters.length === 0) {
+    logger.info('No approved clusters to generate. Approve clusters in the dashboard pipeline.');
+    const totalDuration = Date.now() - startTime;
+    await log('daily-generate', 'No approved clusters', 'info', undefined, {
+      discovery: { services: discovery.servicesProcessed, keywords: discovery.keywordsDiscovered },
+    }, totalDuration);
+
+    return {
+      discovery,
+      generated: 0, errors: 0,
+      duration: totalDuration,
+    };
+  }
+
+  logger.info(`Found ${approvedClusters.length} approved clusters:`);
+  for (const c of approvedClusters) {
+    logger.info(`  • ${c.site_key}/${c.main_keyword} (vol: ${c.total_volume}, kw: ${c.keyword_count})`);
+  }
+
+  // Build UniversalPages from clusters
+  const candidatePages: Array<{ page: UniversalPage; cluster: KeywordClusterRow }> = [];
+  for (const cluster of approvedClusters) {
+    if (EXCLUDED_SITES.includes(cluster.site_key)) continue;
+    const page = clusterToPage(cluster);
+    if (page) candidatePages.push({ page, cluster });
+  }
+
+  if (candidatePages.length === 0) {
+    logger.warn('No valid pages could be built from approved clusters');
+    return { discovery, generated: 0, errors: 0, duration: Date.now() - startTime };
+  }
+
+  // Anti-cannibalization check
+  logger.info(`\nRunning anti-cannibalization check on ${candidatePages.length} pages...`);
+  const { safe, blocked } = await filterCannibalized(candidatePages.map(c => c.page));
+
+  if (blocked.length > 0) {
+    logger.warn(`${blocked.length} pages blocked by cannibalization detector:`);
+    for (const b of blocked) {
+      logger.warn(`  ✗ ${b.page.slug} — ${b.risks[0]?.reason}`);
+      // Mark cluster as 'conflict' so dashboard shows the issue
+      const cluster = candidatePages.find(c => c.page.slug === b.page.slug)?.cluster;
+      if (cluster?.id) await updateClusterStatus(cluster.id, 'conflict');
     }
+  }
 
-    const siteStart = Date.now();
-    logger.info(`\n--- Scoring ${siteKey} (${site.name}) ---`);
+  const safeCandidates = candidatePages.filter(c => safe.includes(c.page));
+  logger.info(`${safeCandidates.length} pages safe to generate`);
 
+  if (dryRun) {
+    logger.info('[DRY RUN] Would generate:');
+    for (const { page, cluster } of safeCandidates) {
+      logger.info(`  • ${page.slug} [${page.intent}] — cluster: ${cluster.main_keyword}`);
+    }
+    return { discovery, generated: 0, errors: 0, duration: Date.now() - startTime };
+  }
+
+  // Generate pages
+  let generated = 0;
+  let errors = 0;
+
+  for (const { page, cluster } of safeCandidates) {
     try {
-      // 1. Get all possible pages from matrix
-      const matrix = generateMatrix(siteKey);
-      logger.info(`Matrix: ${matrix.length} total pages possible`);
+      logger.info(`\n  Generating: ${page.slug} [${page.intent}] (${cluster.main_keyword})...`);
 
-      // 2. Get already existing slugs (Supabase + site data files)
-      const supabaseSlugs = await getExistingSlugs(siteKey);
-      const fileSlugs = getExistingSlugsFromFiles(siteKey);
-      const existingSlugs = new Set([...supabaseSlugs, ...fileSlugs]);
-      logger.info(`Existing: ${existingSlugs.size} unique`);
+      const seoPage = await generatePageContent(page);
+      await upsertSeoPage(seoPage);
 
-      // 3. Filter out existing pages
-      const candidatePages = matrix.filter(p => !existingSlugs.has(p.slug));
-      logger.info(`Candidates: ${candidatePages.length}`);
+      // Update cluster status to 'generated'
+      if (cluster.id) await updateClusterStatus(cluster.id, 'generated');
 
-      if (candidatePages.length === 0) {
-        allResults[siteKey] = { scored: 0, pending: 0, errors: 0 };
-        continue;
+      generated++;
+      logger.success(`  ✓ ${page.slug} — stored in seo_pages`);
+
+      await log('daily-generate', `Generated ${page.slug}`, 'success', page.siteKey, {
+        slug: page.slug,
+        intent: page.intent,
+        clusterId: cluster.id,
+        clusterKeyword: cluster.main_keyword,
+        volume: cluster.total_volume,
+      });
+
+      // Rate limit between generations
+      if (generated < safeCandidates.length) {
+        await new Promise(r => setTimeout(r, 1500));
       }
-
-      // 4. Fetch keyword scores from Supabase — ZERO external API calls
-      const kwScoresRaw = await getPageKeywordScores(siteKey);
-      const kwScores = new Map<string, PageKeywordScore>();
-      for (const ks of kwScoresRaw) {
-        kwScores.set(ks.suggested_page, ks);
-      }
-      logger.info(`Keyword data: ${kwScores.size} page patterns from discovered_keywords`);
-
-      // 5. Score each candidate: volume DESC, KD ASC
-      const scoredPages: ScoredPage[] = [];
-
-      for (const page of candidatePages) {
-        const match = findKeywordMatch(page.slug, kwScores);
-
-        if (!match) continue; // No keyword data → skip (Supabase-only = no guessing)
-
-        // Score formula: volume drives priority, KD penalizes
-        const volumeScore = Math.round(match.total_volume / 1000);
-        const kdPenalty = Math.round(match.avg_kd / 10);
-        const score = Math.max(1, volumeScore - kdPenalty);
-
-        const details = `vol:${match.total_volume} kd:${match.avg_kd} cpc:${match.avg_cpc}€ kw:${match.keyword_count}`;
-
-        scoredPages.push({
-          ...page,
-          score,
-          totalVolume: match.total_volume,
-          avgKd: match.avg_kd,
-          avgCpc: match.avg_cpc,
-          keywordCount: match.keyword_count,
-          scoreDetails: details,
-        });
-      }
-
-      // 6. Sort: volume DESC, KD ASC, city population DESC (tiebreaker)
-      scoredPages.sort((a, b) =>
-        b.totalVolume - a.totalVolume ||
-        a.avgKd - b.avgKd ||
-        (b.city?.population || 0) - (a.city?.population || 0)
-      );
-
-      // 7. Take top N
-      const qualifiedPages = scoredPages.slice(0, PAGES_PER_RUN_LOCAL);
-
-      // Log top 10
-      const topDisplay = scoredPages.slice(0, 10);
-      for (const [i, p] of topDisplay.entries()) {
-        logger.info(`  ${i + 1}. ${p.slug} — score ${p.score} (${p.scoreDetails})`);
-      }
-      logger.info(`Total scored: ${scoredPages.length} | Qualified: ${qualifiedPages.length}`);
-
-      if (dryRun) {
-        allResults[siteKey] = { scored: scoredPages.length, pending: qualifiedPages.length, errors: 0 };
-        continue;
-      }
-
-      // 8. Store in pending_pages table
-      if (qualifiedPages.length > 0) {
-        const pendingRows: PendingPageRow[] = qualifiedPages.map(p => ({
-          site_key: siteKey,
-          slug: p.slug,
-          page_type: p.pageType,
-          service_slug: p.service?.slug,
-          city_slug: p.city?.slug,
-          score: p.score,
-          score_details: p.scoreDetails,
-          status: 'pending_approval' as const,
-          batch_id: batchId,
-        }));
-
-        const stored = await upsertPendingPages(pendingRows);
-        if (stored === -1) {
-          logger.warn('pending_pages table not found — run migration-pending-pages.sql');
-        } else {
-          logger.success(`Stored ${stored} pages in pending_pages`);
-
-          // 9. Send Telegram approval message
-          const { getSupabase } = await import('../db/supabase.js');
-          const db = getSupabase();
-          const { data: storedPages } = await db
-            .from('pending_pages')
-            .select('*')
-            .eq('site_key', siteKey)
-            .eq('batch_id', batchId)
-            .eq('status', 'pending_approval')
-            .order('score', { ascending: false });
-
-          if (storedPages && storedPages.length > 0) {
-            await sendApprovalMessage(siteKey, site.name, storedPages as Array<PendingPageRow & { id: string }>, batchId);
-          }
-        }
-      }
-
-      const duration = Date.now() - siteStart;
-      allResults[siteKey] = {
-        scored: scoredPages.length,
-        pending: qualifiedPages.length,
-        errors: 0,
-      };
-
-      await log('daily-generate', `Scored ${scoredPages.length}, ${qualifiedPages.length} pending approval`, 'success', siteKey, {
-        scored: scoredPages.length,
-        pending: qualifiedPages.length,
-        batchId,
-        topScores: qualifiedPages.slice(0, 5).map(p => ({ slug: p.slug, score: p.score, volume: p.totalVolume, kd: p.avgKd, details: p.scoreDetails })),
-      }, duration);
 
     } catch (e) {
       const errMsg = (e as Error).message;
-      logger.error(`Fatal error for ${siteKey}: ${errMsg}`);
-      allResults[siteKey] = { scored: 0, pending: 0, errors: 1 };
-      await log('daily-generate', `Error: ${errMsg}`, 'error', siteKey);
-      await notifyError('daily-generate', `${siteKey}: ${errMsg}`, siteKey);
+      logger.error(`  ✗ ${page.slug}: ${errMsg}`);
+      errors++;
+
+      // Mark cluster as error, don't leave it stuck in 'approved'
+      if (cluster.id) await updateClusterStatus(cluster.id, 'error');
+
+      await log('daily-generate', `Error: ${page.slug}: ${errMsg}`, 'error', page.siteKey);
     }
   }
 
   // Final summary
   const totalDuration = Date.now() - startTime;
-  const totalScored = Object.values(allResults).reduce((s, r) => s + r.scored, 0);
-  const totalPending = Object.values(allResults).reduce((s, r) => s + r.pending, 0);
-  const totalErrors = Object.values(allResults).reduce((s, r) => s + r.errors, 0);
 
   logger.info('\n=== Summary ===');
-  logger.info(`Discovery: ${discovery.servicesProcessed} services, ${discovery.keywordsDiscovered} keywords, ${discovery.dataforseoCalls} API calls`);
-  logger.info(`Scoring: ${totalScored} scored | ${totalPending} pending | ${totalErrors} errors`);
+  logger.info(`Discovery: ${discovery.servicesProcessed} services, ${discovery.keywordsDiscovered} keywords`);
+  logger.info(`Generation: ${generated} generated, ${errors} errors, ${blocked.length} blocked (cannibalization)`);
   logger.info(`Duration: ${(totalDuration / 1000).toFixed(1)}s`);
 
-  for (const [key, r] of Object.entries(allResults)) {
-    logger.info(`  ${key}: scored=${r.scored} pending=${r.pending} err=${r.errors}`);
-  }
+  await log('daily-generate', 'Completed', 'info', undefined, {
+    discovery: {
+      services: discovery.servicesProcessed,
+      keywords: discovery.keywordsDiscovered,
+      calls: discovery.dataforseoCalls,
+    },
+    generation: { generated, errors, blocked: blocked.length },
+    clusters: safeCandidates.map(c => ({
+      id: c.cluster.id,
+      keyword: c.cluster.main_keyword,
+      slug: c.page.slug,
+    })),
+  }, totalDuration);
 
-  if (!dryRun) {
-    await log('daily-generate', 'Completed', 'info', undefined, {
-      discovery: {
-        services: discovery.servicesProcessed,
-        keywords: discovery.keywordsDiscovered,
-        calls: discovery.dataforseoCalls,
-        details: discovery.details,
-      },
-      scoring: { totalScored, totalPending, totalErrors },
-      batchId,
-      sites: allResults,
-    }, totalDuration);
-  }
-
-  return {
-    discovery,
-    totalScored, totalPending, totalErrors,
-    batchId, duration: totalDuration, sites: allResults,
-  };
+  return { discovery, generated, errors, blocked: blocked.length, duration: totalDuration };
 }
 
 // Run directly if called as script

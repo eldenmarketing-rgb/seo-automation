@@ -49,7 +49,29 @@ export function registerKeywordsCommand(bot: Bot<BotContext>) {
 
       // Send keyword report
       const report = formatKeywordsForTelegram(keywords, `${topic} ${location}`);
-      await ctx.reply(report, { parse_mode: 'HTML' });
+
+      // Add intent distribution (DataForSEO priority, regex fallback)
+      let intentLine = '';
+      try {
+        const { classifyIntent } = await import('../../keywords/intent-classifier.js');
+        const dist: Record<string, number> = { T: 0, C: 0, I: 0, L: 0 };
+        const intentMap: Record<string, string> = {
+          transactional: 'T', commercial: 'C', informational: 'I', local: 'L',
+          navigational: 'L',
+        };
+        let dfsCount = 0;
+        for (const kw of keywords) {
+          // Use DataForSEO intent if available, otherwise regex
+          const intent = (kw as any).intent || classifyIntent(kw.keyword);
+          dist[intentMap[intent] || 'T']++;
+          if ((kw as any).intent) dfsCount++;
+        }
+        const total = keywords.length || 1;
+        const src = dfsCount > 0 ? ` (${dfsCount} DFS)` : '';
+        intentLine = `\n📊 <b>Intentions${src}:</b> T:${Math.round(dist.T / total * 100)}% C:${Math.round(dist.C / total * 100)}% I:${Math.round(dist.I / total * 100)}% L:${Math.round(dist.L / total * 100)}%`;
+      } catch (_) { /* classifier not available */ }
+
+      await ctx.reply(report + intentLine, { parse_mode: 'HTML' });
 
       // Suggest pages
       const pageSuggestions = suggestPages(keywords, topic, location);

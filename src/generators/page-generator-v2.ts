@@ -91,11 +91,22 @@ async function buildKeywordsContext(page: UniversalPage): Promise<string> {
         return `- "${k.keyword}"${vol}`;
       });
 
-      return [
+      const parts = [
         `═══ CLUSTER SÉMANTIQUE — ${cluster.main_keyword} (${cluster.keyword_count} mots-clés, ${cluster.total_volume} recherches/mois cumulées) ═══`,
         `Ta page DOIT couvrir l'ensemble de ce cluster. Chaque mot-clé ci-dessous doit être intégré naturellement dans le contenu (titre, sous-titres, paragraphes, FAQ).`,
         `Priorise les mots-clés à fort volume :\n${lines.join('\n')}`,
-      ].join('\n');
+      ];
+
+      // Inject intent modifier if cluster has a dominant_intent
+      if (cluster.dominant_intent) {
+        try {
+          const { getIntentPromptModifier } = await import('../keywords/intent-classifier.js');
+          const modifier = getIntentPromptModifier(cluster.dominant_intent as any);
+          if (modifier) parts.push('\n' + modifier);
+        } catch (_) { /* intent-classifier not available, skip */ }
+      }
+
+      return parts.join('\n');
     }
 
     // 2. Fallback: fetch discovered_keywords directly matching this page's service/slug

@@ -32,14 +32,30 @@ export interface CannibalizationRisk {
 
 // ─── Token Overlap ───────────────────────────────────────────
 
+// City names excluded — they match all geo-targeted pages and cause false positives
+const CITY_NAMES = new Set([
+  'perpignan', 'cabestany', 'saint-esteve', 'pia', 'bompas', 'saleilles',
+  'canohes', 'toulouges', 'soler', 'pollestres', 'claira', 'rivesaltes',
+  'canet-en-roussillon', 'canet', 'saint-cyprien', 'elne', 'thuir',
+  'saint-laurent-de-la-salanque', 'saint-laurent', 'barcares', 'argeles-sur-mer',
+  'argeles', 'collioure', 'port-vendres', 'ceret', 'prades', 'ille-sur-tet',
+  'amelie-les-bains', 'leucate', 'narbonne', 'beziers', 'carcassonne',
+  'toulouse', 'marseille', 'montpellier',
+]);
+
+const STOP_WORDS = new Set([
+  'les', 'des', 'une', 'pour', 'par', 'dans', 'sur', 'avec', 'votre', 'notre',
+  ...CITY_NAMES,
+]);
+
 function tokenize(text: string): Set<string> {
   return new Set(
     text.toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .split(/[-_\s]+/)
-      .filter(t => t.length > 2)  // Ignore short words (de, le, à...)
-      .filter(t => !['les', 'des', 'une', 'pour', 'par', 'dans', 'sur', 'avec', 'votre', 'notre'].includes(t))
+      .filter(t => t.length > 2)
+      .filter(t => !STOP_WORDS.has(t))
   );
 }
 

@@ -62,6 +62,7 @@ interface KwRow {
   cpc: number | null;
   suggested_page: string | null;
   status: string;
+  intent_type?: string;
 }
 
 interface Cluster {
@@ -72,6 +73,7 @@ interface Cluster {
   keywords: Array<{ keyword: string; volume: number; score: number }>;
   tokens: string[];
   suggestedSlug: string | null;
+  intentCounts: Record<string, number>;
 }
 
 function clusterKeywords(rows: KwRow[]): Cluster[] {
@@ -95,9 +97,12 @@ function clusterKeywords(rows: KwRow[]): Cluster[] {
       }
     }
 
+    const rowIntent = row.intent_type || 'transactional';
+
     if (bestCluster) {
       bestCluster.keywords.push({ keyword: row.keyword, volume: row.volume || 0, score: row.score });
       bestCluster.totalVolume += row.volume || 0;
+      bestCluster.intentCounts[rowIntent] = (bestCluster.intentCounts[rowIntent] || 0) + 1;
       if ((row.volume || 0) > bestCluster.mainVolume) {
         bestCluster.mainKeyword = row.keyword;
         bestCluster.mainVolume = row.volume || 0;
@@ -115,6 +120,7 @@ function clusterKeywords(rows: KwRow[]): Cluster[] {
         keywords: [{ keyword: row.keyword, volume: row.volume || 0, score: row.score }],
         tokens,
         suggestedSlug: row.suggested_page,
+        intentCounts: { [rowIntent]: 1 },
       });
     }
 
@@ -178,16 +184,28 @@ async function storeClusters(siteKey: string, clusters: Cluster[]): Promise<numb
   // (full recalculation is cleaner than partial merge)
   await db.from('keyword_clusters').delete().eq('site_key', siteKey);
 
-  const rows = clusters.map(c => ({
-    site_key: siteKey,
-    cluster_name: c.name,
-    main_keyword: c.mainKeyword,
-    total_volume: c.totalVolume,
-    keyword_count: c.keywords.length,
-    keywords_list: c.keywords,
-    suggested_slug: c.suggestedSlug,
-    status: 'new',
-  }));
+  const rows = clusters.map(c => {
+    // Compute dominant intent by majority vote
+    let dominantIntent = 'transactional';
+    let maxCount = 0;
+    for (const [intent, count] of Object.entries(c.intentCounts)) {
+      if (count > maxCount) {
+        maxCount = count;
+        dominantIntent = intent;
+      }
+    }
+    return {
+      site_key: siteKey,
+      cluster_name: c.name,
+      main_keyword: c.mainKeyword,
+      total_volume: c.totalVolume,
+      keyword_count: c.keywords.length,
+      keywords_list: c.keywords,
+      suggested_slug: c.suggestedSlug,
+      dominant_intent: dominantIntent,
+      status: 'new',
+    };
+  });
 
   let stored = 0;
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
@@ -245,7 +263,7 @@ export async function weeklyClustering(forceAll = false) {
     // Fetch all keywords for this site
     const { data, error } = await db
       .from('discovered_keywords')
-      .select('keyword, score, volume, cpc, suggested_page, status')
+      .select('keyword, score, volume, cpc, suggested_page, status, intent_type')
       .eq('site_key', siteKey)
       .order('volume', { ascending: false });
 

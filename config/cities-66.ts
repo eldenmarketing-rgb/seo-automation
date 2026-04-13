@@ -54,18 +54,10 @@ export const cities66: City66[] = [
 // Villes pertinentes par type de site
 export const citiesBySite: Record<string, string[]> = {
   garage: [
-    'perpignan', 'cabestany', 'saint-esteve', 'pia', 'bompas', 'saleilles',
-    'canohes', 'toulouges', 'le-soler', 'pollestres', 'claira', 'rivesaltes',
-    'canet-en-roussillon', 'elne', 'thuir', 'saint-laurent-de-la-salanque',
-    'argeles-sur-mer', 'saint-cyprien', 'le-barcares', 'collioure',
-    'port-vendres', 'ceret', 'prades', 'ille-sur-tet',
+    'perpignan', // Stratégie V2 : pages service-perpignan uniquement, plus de pages ville
   ],
   carrosserie: [
-    'perpignan', 'cabestany', 'saint-esteve', 'pia', 'bompas', 'saleilles',
-    'canohes', 'toulouges', 'le-soler', 'pollestres', 'rivesaltes',
-    'canet-en-roussillon', 'elne', 'thuir', 'saint-cyprien',
-    'argeles-sur-mer', 'ceret', 'prades', 'ille-sur-tet',
-    'saint-laurent-de-la-salanque', 'le-barcares', 'claira', 'collioure',
+    'perpignan', // Stratégie V2 : pages service-perpignan uniquement, plus de pages ville
   ],
   massage: [
     'perpignan', 'cabestany', 'saint-esteve', 'pia', 'toulouges',

@@ -535,6 +535,7 @@ export interface DiscoveredKeywordRow {
   volume?: number;
   cpc?: number;
   competition?: string;
+  intent_type?: string;
 }
 
 export async function upsertDiscoveredKeywords(rows: DiscoveredKeywordRow[]) {
@@ -728,6 +729,7 @@ export interface KeywordClusterRow {
   keywords_list: Array<{ keyword: string; volume: number; score: number }>;
   suggested_slug?: string;
   status?: string;
+  dominant_intent?: string;
 }
 
 /**

@@ -34,7 +34,7 @@ const registry: Record<string, SiteModeConfig> = {
       ],
       experienceProof: 'Plus de 15 ans d\'expérience en mécanique automobile toutes marques',
     },
-    enabledIntents: ['city_hub', 'service', 'prix', 'urgence', 'avis', 'faq'],
+    enabledIntents: ['service', 'prix', 'faq'],  // Stratégie V2 : pages service-perpignan, plus de city_hub
     content: {
       minWordCount: 1200,
       maxWordCount: 2500,
@@ -44,7 +44,7 @@ const registry: Record<string, SiteModeConfig> = {
       includeUpdatedDate: true,
     },
     cocooning: {
-      pillarPages: ['perpignan', 'garage-automobile'],
+      pillarPages: ['garage-automobile'],
       clusterDepth: 2,
       maxInternalLinks: 5,
     },
@@ -66,7 +66,7 @@ const registry: Record<string, SiteModeConfig> = {
       ],
       experienceProof: 'Carrossier certifié avec plus de 2000 véhicules réparés',
     },
-    enabledIntents: ['city_hub', 'service', 'prix', 'avis'],
+    enabledIntents: ['service', 'prix', 'avis'],  // Stratégie V2 : pages service-perpignan, plus de city_hub
     content: {
       minWordCount: 1200,
       maxWordCount: 2500,
@@ -76,7 +76,7 @@ const registry: Record<string, SiteModeConfig> = {
       includeUpdatedDate: true,
     },
     cocooning: {
-      pillarPages: ['perpignan', 'carrosserie-automobile'],
+      pillarPages: ['carrosserie-automobile'],
       clusterDepth: 2,
       maxInternalLinks: 5,
     },

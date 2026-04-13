@@ -154,6 +154,7 @@ export async function getSearchVolume(keywords: string[]): Promise<Map<string, K
         competition: item.competition || null,
         competitionIndex: item.competition_index || 0,
         trend,
+        intent: item.search_intent_info?.main_intent || undefined,
       });
     }
 

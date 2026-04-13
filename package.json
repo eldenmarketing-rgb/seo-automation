@@ -11,7 +11,8 @@
     "cluster": "tsx src/jobs/weekly-clustering.ts",
     "run": "tsx scripts/run.ts",
     "test-telegram": "tsx src/notifications/telegram.ts",
-    "bot": "tsx src/bot/index.ts"
+    "bot": "tsx src/bot/index.ts",
+    "backfill-intents": "tsx scripts/backfill-intents.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
