@@ -124,22 +124,32 @@ Le score actuel (10 critères structure) est insuffisant. Ajouter :
 
 ## Phase 2 — Content Briefs + Génération (Semaine 1-2)
 
-### 2.1 Content Brief (NOUVELLE ÉTAPE — industrie standard)
-Le brief est l'étape entre "cluster approved" et "page generated". Il contient les instructions pour la génération, basées sur l'analyse du SERP.
+### 2.1 Content Brief + Analyse SERP concurrents (NOUVELLE ÉTAPE — industrie standard)
+Le brief est l'étape entre "cluster approved" et "page generated". Il contient les instructions pour la génération, basées sur l'analyse SERP des concurrents réels.
 
+**Analyse SERP automatique (via `seo-automation/src/serp/competitor-analysis.ts` — EXISTE DÉJÀ) :**
+- [ ] Intégrer `analyzeSerpForPrompt(query)` dans la route brief — analyse les top 3 Google
+- [ ] Pour chaque concurrent : word count, structure H2, termes-clés, FAQ, schema.org
+- [ ] `quickSerpTerms(query)` en fallback si quota DataForSEO limité
+- [ ] Résultat SERP affiché dans le brief UI : tableau comparatif (URL, mots, H2s, termes manquants)
+- [ ] Calcul automatique : word count cible = max(concurrent1, concurrent2, concurrent3) + 20%
+- [ ] Termes NLP manquants extraits des concurrents → injectés dans le brief
+- [ ] `buildSerpPromptBlock()` inclus dans le prompt de génération (Phase 2.2)
+
+**Brief generation :**
 - [ ] API route `/api/briefs/generate` POST — reçoit cluster_id
 - [ ] Le brief contient :
   - Keyword principal + secondaires (du cluster)
   - Intent de recherche
-  - Word count cible (800-1200 pour service, 400-600 pour ville)
-  - Structure H2/H3 recommandée (5-7 sections)
-  - Questions à couvrir (FAQ : 6 minimum, 60-120 mots/réponse)
-  - Termes NLP à inclure (extraits des pages existantes qui rankent pour ce keyword)
-  - Concurrents à battre (top 3 URLs si disponibles via GSC)
+  - **Analyse SERP concurrents** : top 3 URLs, word counts, structures H2, termes NLP manquants
+  - Word count cible (calculé depuis SERP : max concurrent + 20%, minimum 800 mots)
+  - Structure H2/H3 recommandée (basée sur l'analyse des H2 concurrents + gaps identifiés)
+  - Questions à couvrir (FAQ : 6 minimum, 60-120 mots/réponse — enrichies par les FAQ concurrents)
+  - Termes NLP à inclure (extraits des concurrents + Google Suggest)
   - Consignes E-E-A-T : expérience locale, certifications, cas pratiques à mentionner
-  - Maillage interne : pages existantes à lier
+  - Maillage interne : pages existantes à lier (via cocooning engine)
   - Schema.org : type à utiliser
-- [ ] Brief sauvegardé en base (nouvelle table `content_briefs` ou champ JSONB dans `keyword_clusters`)
+- [ ] Brief sauvegardé en JSONB dans `keyword_clusters.brief` (décision architecture validée)
 - [ ] Brief visible et éditable dans le dashboard avant génération
 - [ ] Cluster status → 'brief' une fois le brief créé
 
@@ -148,9 +158,10 @@ Le brief est l'étape entre "cluster approved" et "page generated". Il contient 
 - [ ] Construit le prompt Claude à partir du brief (pas hardcodé)
 - [ ] Claude Sonnet, 8192 tokens max
 - [ ] Prompt inclut :
-  - Le brief complet
+  - Le brief complet (avec données SERP concurrents)
+  - Le bloc SERP (`buildSerpPromptBlock()`) : structure concurrents, termes manquants, recommandations
   - Les pages existantes du site (pour éviter la duplication)
-  - Les liens internes à injecter
+  - Les liens internes à injecter (via `computeCocoonLinks()` du cocooning engine)
   - Consignes de style : "Écris comme un professionnel [métier] avec 15 ans d'expérience à [ville]"
   - Consignes E-E-A-T : mentionner des cas concrets, quartiers, landmarks locaux
 - [ ] Retourne la page complète (meta, H1, intro, 5+ seoSections, 6+ FAQ, highlights, trustSignals, schema_org)
