@@ -367,17 +367,49 @@ Phase 7 (overview + polish)     ████░░░░░░  → UTILISER con
 ## Contraintes techniques
 
 - Dashboard = Next.js 16 / React 19 / Tailwind 4 / Supabase
+- **Dashboard hébergé en LOCAL sur le VPS** (pas Vercel) — seul utilisateur = Elden
 - Même base Supabase que seo-automation
-- Claude API : Sonnet 4 (`claude-sonnet-4-20250514`) avec fallback Haiku
 - Human-in-the-loop : jamais d'auto-publish, toujours validation manuelle
 - Toutes les API routes en `force-dynamic`
 - Pattern existant : `getSupabase()` singleton, pas d'auth (VPS local)
-- Prompt de génération : adapter le system prompt pour E-E-A-T (expérience locale, cas concrets)
+- Dashboard en permanence via `pm2` : `pm2 start npm --name "seo-dashboard" -- run start`
+
+## Décisions architecturales (VALIDÉES)
+
+### 1. Brief : champ JSONB dans `keyword_clusters`
+- Un cluster = un brief, c'est logique
+- Pas besoin d'historiser les briefs — c'est la page qui a le versioning
+- Simple, pas de table supplémentaire
+
+### 2. Génération : Claude CLI (Max) via le VPS
+- La route `/api/generate` du dashboard exécute `claude --print` sur le VPS
+- **Avantages :**
+  - Zéro coût API (Claude Max déjà payé)
+  - Le CLI a accès à tout le contexte : CLAUDE.md, mémoire SEO 2026, filesystem, templates, pages existantes
+  - Le prompt peut être court — Claude a déjà les règles E-E-A-T, scoring, conventions
+  - Il peut lire les pages existantes pour éviter la duplication et gérer le maillage interne
+  - Pas de duplication de logique entre dashboard et seo-automation
+- **Implémentation :**
+  ```ts
+  // /api/generate/route.ts
+  import { exec } from 'child_process';
+  exec(`claude --print -p "${prompt}"`, {
+    maxBuffer: 1024 * 1024,
+    timeout: 120000,
+    cwd: '/home/ubuntu/sites/seo-automation'  // accès au contexte CLAUDE.md + mémoire
+  }, callback);
+  ```
+- Le CLI se lance à la demande (quand l'utilisateur clique "Générer"), pas en permanence
+- **API Anthropic conservée** pour les petits appels rapides existants (analyse keywords, triage clusters, chat)
+
+### 3. Crons
+- **`weekly-gsc-audit` → GARDER** — alimente `gsc_positions` en base, le dashboard en a besoin
+- **`daily-generate` → ARRÊTER** — la génération devient manuelle via dashboard (human-in-the-loop)
+- **`monthly-optimize` → TRANSFORMER** — crée des drafts status='review' au lieu de publier directement, l'utilisateur valide ensuite dans le dashboard
 
 ## Migrations Supabase nécessaires
 
-- [ ] Table `content_briefs` (id, cluster_id, site_key, brief JSONB, created_at, updated_at)
-  - OU champ `brief` JSONB dans `keyword_clusters`
+- [ ] Champ `brief` JSONB dans `keyword_clusters` (contient le content brief)
 - [ ] Champ `word_count` INTEGER dans `seo_pages` (calculé à la sauvegarde)
 - [ ] Champ `decay_score` FLOAT dans `gsc_positions` (calculé par le weekly audit)
 - [ ] Champ `resolved` BOOLEAN dans une table `cannibalization_resolutions`
@@ -388,14 +420,9 @@ Phase 7 (overview + polish)     ████░░░░░░  → UTILISER con
 | Risque | Mitigation |
 |--------|------------|
 | Pages vides déjà indexées par Google | Phase 0 : régénérer en urgence avec du vrai contenu |
-| Duplication logique génération (dashboard vs seo-automation) | Le dashboard devient le seul point de génération. seo-automation garde les crons pour GSC sync et monitoring |
+| Claude CLI timeout sur pages longues | timeout 120s, maxBuffer 1MB, retry si échec |
+| Rate limits Claude Max | Générer par batch de 5-10 max/session, pas de génération massive |
 | 437 clusters saturent l'UI | Pagination + tri IA en masse |
-| Coût Claude API pour génération massive | Générer par batch de 5-10 max/jour, human review chaque page |
 | Contenu généré de mauvaise qualité | Quality gate ≥ 60 avant save + brief enrichi + review humaine |
 | Perte de ranking sur pages régénérées | Garder le même slug/URL, améliorer le contenu sans changer la cible |
-
-## Décisions architecturales à prendre
-
-1. **Brief : table séparée ou champ JSONB ?** — Table séparée si on veut historiser les briefs, JSONB si on veut rester simple
-2. **Génération : dashboard direct ou via seo-automation API ?** — Dashboard direct est plus simple et évite la dépendance. Le prompt sera dans le dashboard.
-3. **Les crons (daily-generate, weekly-audit) continuent-ils ?** — Le weekly-audit GSC oui (alimente la BDD). Le daily-generate non (la génération devient manuelle via dashboard).
+| Dashboard tombe si VPS reboot | pm2 avec auto-restart + pm2 save + pm2 startup |
