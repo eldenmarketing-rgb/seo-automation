@@ -321,30 +321,91 @@ new → triaged → approved → brief → generated → review → published �
 
 ---
 
-## Phase 7 — Overview et polish (Semaine 3)
+## Phase 7 — Visualisation du maillage interne (Semaine 3)
 
-### 7.1 Overview enrichi
+Le système de cocooning existe déjà (`src/linking/cocooning.ts`) avec une architecture
+pilier → cluster → feuille et 3 modes (local, thématique, produit). Ce qui manque
+c'est la visibilité dans le dashboard.
+
+### 7.1 Page Maillage `/maillage`
+- [ ] Nouveau lien nav "Maillage"
+- [ ] **Vue arborescente par site** : visualiser la structure du cocon sémantique
+  - Piliers (hubs) en haut, avec leurs clusters enfants, et les feuilles en dessous
+  - Afficher pour chaque page : slug, nombre de liens entrants, nombre de liens sortants
+  - Couleur par niveau : pilier (or), cluster (bleu), feuille (gris)
+  - Lignes de connexion entre les pages liées (ou indentation arborescente)
+- [ ] **Filtre par site** (SiteFilter existant)
+- [ ] Clic sur une page → ouvre la page détaillée `/pages/[id]`
+
+### 7.2 Audit des liens internes
+- [ ] **Pages orphelines** : pages avec 0 liens entrants (aucune autre page ne pointe vers elles)
+  - Alerte rouge : "X pages orphelines" par site
+  - Liste cliquable avec suggestion de pages parentes logiques
+- [ ] **Pages sans liens sortants** : pages qui ne lient vers aucune autre page
+  - Alerte orange : "X pages sans liens sortants"
+- [ ] **Liens cassés** : liens internes qui pointent vers des slugs inexistants
+  - Vérifie `content.internalLinks[].slug` vs slugs existants en base
+  - Alerte rouge avec le slug cassé et la page qui le contient
+- [ ] **Pages sur-linkées** : pages avec > 10 liens entrants (concentration excessive)
+- [ ] **Score de maillage par site** : % de pages correctement liées (parent + siblings)
+
+### 7.3 Suggestions automatiques de liens manquants
+- [ ] Pour chaque page : recalculer les liens via `cocooning.ts` et comparer avec les liens actuels
+- [ ] Afficher les liens recommandés mais absents : "Cette page devrait lier vers X mais ne le fait pas"
+- [ ] **Bouton "Corriger"** : ajoute les liens manquants au contenu de la page (update `content.internalLinks` en base)
+- [ ] Après correction → recalcul du quality score (le critère internalLinks ≥ 2 passe)
+
+### 7.4 Statistiques maillage sur l'overview
+- [ ] Par site : nombre de pages orphelines, liens cassés, score de maillage %
+- [ ] Alerte si > 20% de pages orphelines
+
+### 7.5 API routes
+- [ ] `/api/maillage` GET — retourne l'arbre du cocon par site avec stats liens entrants/sortants
+  - Interroge `seo_pages` pour récupérer slug, content.internalLinks, site_key, page_type, intent
+  - Calcule les liens entrants par page (qui pointe vers qui)
+  - Détecte orphelines, sans sortants, cassés
+- [ ] `/api/maillage/audit` GET — retourne orphelines, cassés, manquants par site
+- [ ] `/api/maillage/fix` POST — ajoute les liens manquants à une page (update content.internalLinks)
+
+**Fichiers à créer :**
+- `seo-dashboard/src/app/maillage/page.tsx`
+- `seo-dashboard/src/app/api/maillage/route.ts`
+- `seo-dashboard/src/app/api/maillage/audit/route.ts`
+- `seo-dashboard/src/app/api/maillage/fix/route.ts`
+
+**Fichiers à modifier :**
+- `seo-dashboard/src/components/Nav.tsx` (ajouter lien Maillage)
+
+**Dépendance :**
+- La logique de `cocooning.ts` (seo-automation) peut être importée ou dupliquée côté dashboard pour les suggestions. Comme le CLI Claude a accès au cocooning lors de la génération, le dashboard n'a besoin que de l'audit (lecture des liens en base).
+
+---
+
+## Phase 8 — Overview et polish (Semaine 3-4)
+
+### 8.1 Overview enrichi
 - [ ] Quality score moyen par site (avec alerte si < 60)
 - [ ] Nombre de pages à risque (score < 40) par site — alerte rouge
 - [ ] Top 5 pages qui montent (GSC) + Top 5 en déclin
 - [ ] Compteur pipeline : X brief → Y generated → Z published cette semaine
 - [ ] Volume total de recherche des clusters approved (potentiel non exploité)
+- [ ] **Score maillage par site** (% pages correctement liées + alertes orphelines)
 - [ ] Retirer le site "reprog" fantôme ou l'ajouter dans SITES config
 
-### 7.2 UX améliorations
+### 8.2 UX améliorations
 - [ ] Bouton refresh sur chaque page (icône reload, pas F5)
 - [ ] Toast notifications pour actions (publish, generate, triage, merge)
 - [ ] Confirmation avant actions destructives (supprimer, dépublier)
 - [ ] Pagination sur clusters et keywords (50 par page)
 - [ ] Mobile responsive vérifié (pipeline Kanban en scroll horizontal OK)
 
-### 7.3 Export
+### 8.3 Export
 - [ ] Bouton export CSV sur les pages keywords et GSC
 - [ ] Utile pour le reporting client (artisans locataires)
 
 **Fichiers à modifier :**
 - `seo-dashboard/src/app/page.tsx` (overview enrichi)
-- `seo-dashboard/src/app/api/overview/route.ts` (quality scores, pipeline stats, GSC movers)
+- `seo-dashboard/src/app/api/overview/route.ts` (quality scores, pipeline stats, GSC movers, maillage stats)
 - Tous les composants (toast, refresh, pagination)
 
 ---
@@ -359,7 +420,8 @@ Phase 3 (nettoyage clusters)    ██████░░░░  → PRIORISER le
 Phase 4 (actions cannib)        ████░░░░░░  → RÉSOUDRE les conflits
 Phase 5 (GSC)                   ████████░░  → MESURER la performance
 Phase 6 (pipeline amélioré)     ████░░░░░░  → FLUIDIFIER le workflow
-Phase 7 (overview + polish)     ████░░░░░░  → UTILISER confortablement
+Phase 7 (maillage interne)      ██████░░░░  → VISUALISER le cocon
+Phase 8 (overview + polish)     ████░░░░░░  → UTILISER confortablement
 ```
 
 ---
