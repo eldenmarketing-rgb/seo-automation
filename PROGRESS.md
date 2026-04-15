@@ -10,9 +10,9 @@
 |------|--------------|-----------|-------------------|----------|-----------|
 | carrosserie | 17 | 17 | 0 | 17 | 0 |
 | garage | 37 | 13 | 24 | 13 | 0 |
-| restaurant | 19 | 19 | 0 | 5 | 14 |
+| restaurant | 19 | 19 | 0 | 10 | 9 |
 | vtc | 8 | 8 | 0 | 0 | 8 |
-| **TOTAL** | **81** | **57** | **24** | **35** | **22** |
+| **TOTAL** | **81** | **57** | **24** | **40** | **17** |
 
 ## Pages à traiter (published, score ≤ 30)
 
@@ -56,11 +56,11 @@
 - [x] `livraison-alcool-nuit-le-barcares` (score=25)
 - [x] `livraison-alcool-nuit-argeles-sur-mer` (score=10)
 - [x] `livraison-alcool-nuit-cabestany` (score=25)
-- [ ] `livraison-alcool-nuit-canet-en-roussillon` (score=20)
-- [ ] `livraison-alcool-nuit-leucate` (score=30)
-- [ ] `livraison-alcool-nuit-perpignan` (score=25)
-- [ ] `livraison-alcool-nuit-rivesaltes` (score=20)
-- [ ] `livraison-alcool-nuit-saint-cyprien` (score=20)
+- [x] `livraison-alcool-nuit-canet-en-roussillon` (score=20)
+- [x] `livraison-alcool-nuit-leucate` (score=30)
+- [x] `livraison-alcool-nuit-perpignan` (score=25)
+- [x] `livraison-alcool-nuit-rivesaltes` (score=20)
+- [x] `livraison-alcool-nuit-saint-cyprien` (score=20)
 - [ ] `livraison-alcool-nuit-saint-esteve` (score=25)
 - [ ] `livraison-alcool-nuit-sainte-marie-la-mer` (score=25)
 - [ ] `livraison-alcool-nuit-thuir` (score=30)
@@ -141,9 +141,14 @@
 | livraison-alcool-nuit-le-barcares | restaurant | 25 | ~85 | ~1500 |
 | livraison-alcool-nuit-argeles-sur-mer | restaurant | 10 | ~85 | ~1500 |
 | livraison-alcool-nuit-cabestany | restaurant | 25 | ~85 | ~1400 |
+| livraison-alcool-nuit-canet-en-roussillon | restaurant | 20 | ~85 | ~1500 |
+| livraison-alcool-nuit-leucate | restaurant | 30 | ~85 | ~1400 |
+| livraison-alcool-nuit-perpignan | restaurant | 25 | ~85 | ~1600 |
+| livraison-alcool-nuit-rivesaltes | restaurant | 20 | ~85 | ~1400 |
+| livraison-alcool-nuit-saint-cyprien | restaurant | 20 | ~85 | ~1500 |
 
-> 5 pages régénérées, toutes en status `draft` (v2). 0 erreurs.
-> Restaurant : 5/19 fait (14 restantes).
+> 10 pages régénérées, toutes en status `draft` (v2). 0 erreurs.
+> Restaurant : 10/19 fait (9 restantes).
 
 ## Pages redirected (IGNORÉES — 24 pages garage)
 

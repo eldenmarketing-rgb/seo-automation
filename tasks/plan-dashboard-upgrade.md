@@ -488,6 +488,189 @@ Phase 8 (overview + polish)     ████░░░░░░  → UTILISER con
 - [ ] Champ `resolved` BOOLEAN dans une table `cannibalization_resolutions`
 - [ ] Status 'review' et 'indexed' ajoutés aux enums valides de `keyword_clusters`
 
+## Phase 9 — Backlinks : Monitoring + Link Building (Semaine 4-5)
+
+### 9.1 Monitoring backlinks (DataForSEO Backlinks API)
+- [ ] API route `/api/backlinks/summary` GET — appelle DataForSEO `Backlinks: Summary` par site
+- [ ] API route `/api/backlinks/referring-domains` GET — liste des domaines référents
+- [ ] API route `/api/backlinks/anchors` GET — distribution des textes d'ancre
+- [ ] Cron hebdomadaire : refresh données backlinks pour les 6 sites (stockage Supabase)
+- [ ] Migration Supabase : tables `backlink_profiles`, `referring_domains`, `backlinks`
+
+### 9.2 Page dashboard `/backlinks`
+- [ ] Nouveau lien nav "Backlinks"
+- [ ] **Carte profil par site** : total backlinks, referring domains, domain rank, spam score
+- [ ] **Graphe évolution** new/lost links (DataForSEO `Backlinks: Timeseries`)
+- [ ] **Tableau domaines référents** triable par backlinks count, domain rank, first_seen
+- [ ] **Distribution ancres** : graphe camembert (exact match, brand, generic, URL)
+- [ ] **Alerte spam** : flag si spam score > 30 ou perte massive de backlinks (>10% en 1 semaine)
+- [ ] Filtre par site (SiteFilter existant)
+- [ ] Focus CarrosserPro.fr : TF10, 148 RD — monitorer la rétention
+
+### 9.3 Link Gap et opportunités `/backlinks/opportunities`
+- [ ] API route `/api/backlinks/competitors` GET — DataForSEO `Backlinks: Competitors`
+- [ ] API route `/api/backlinks/link-gap` GET — DataForSEO `Backlinks: Domain Intersection`
+- [ ] **Tableau link gap** : sites qui linkent les concurrents mais pas nous, triés par domain_rank
+- [ ] Score par opportunité : `domain_rank × pertinence_thématique`
+- [ ] Filtre : domain_rank > 20, dofollow uniquement, spam score < 30
+- [ ] Clic sur une opportunité → détail (pages du concurrent linkées, ancres utilisées)
+
+### 9.4 Outreach semi-automatisé (human-in-the-loop)
+- [ ] API route `/api/backlinks/outreach` POST — Claude génère un email personnalisé
+  - Contexte : site cible, pages linkées chez le concurrent, notre page à promouvoir
+  - Ton professionnel, personnalisé au site cible
+- [ ] Statut pipeline par opportunité : `new → contacted → accepted → live → lost`
+- [ ] Table Supabase `outreach_campaigns` : target_domain, email_draft, status, dates
+- [ ] Intégration Gmail API : créer un brouillon (l'utilisateur valide l'envoi)
+- [ ] Vérification auto périodique : le lien existe encore ? (scrape ou DataForSEO refresh)
+- [ ] Alerte si lien perdu (status `live → lost`)
+
+### 9.5 Annuaires locaux
+- [ ] Table Supabase `directory_submissions` : site_key, directory_name, url, status, submitted_at
+- [ ] Checklist pré-configurée de 50+ annuaires FR par niche :
+  - Généralistes : PagesJaunes, Yelp, Cylex, Hotfrog, 118000, Justeacote
+  - Auto : Vroomly, iDGarages, Allogarage, Oscaro Garage
+  - Local : sites mairies, CCI 66, OT Perpignan
+  - Resto : TripAdvisor, TheFork, Google Maps
+- [ ] Pré-remplissage infos depuis `bot_settings` (phone, address, horaires)
+- [ ] Statut par site×annuaire : `todo → submitted → validated → rejected`
+- [ ] Page `/backlinks/directories` avec progression par site
+
+### 9.6 Content link bait (suggestions IA)
+- [ ] API route `/api/backlinks/linkbait` POST — Claude analyse le link gap + GSC
+- [ ] Suggestions de contenus à fort potentiel de liens :
+  - Études locales ("Prix moyen réparation carrosserie dans le 66")
+  - Outils gratuits (estimateur coût en ligne)
+  - Guides complets ("Guide entretien voiture climat méditerranéen")
+  - Infographies comparatives
+- [ ] Score de potentiel par suggestion (basé sur le nombre de RD des contenus similaires chez les concurrents)
+- [ ] Intégration pipeline existant : suggestion → brief → génération → publish
+
+### 9.7 Backlinks sur l'overview
+- [ ] Par site : total backlinks, RD count, domain rank, tendance (↑↓)
+- [ ] Alerte si perte > 10% RD en 1 mois
+- [ ] Nombre d'opportunités link gap non exploitées
+- [ ] Nombre de soumissions annuaires en attente
+
+**Fichiers à créer :**
+- `seo-dashboard/src/app/backlinks/page.tsx`
+- `seo-dashboard/src/app/backlinks/opportunities/page.tsx`
+- `seo-dashboard/src/app/backlinks/directories/page.tsx`
+- `seo-dashboard/src/app/api/backlinks/summary/route.ts`
+- `seo-dashboard/src/app/api/backlinks/referring-domains/route.ts`
+- `seo-dashboard/src/app/api/backlinks/anchors/route.ts`
+- `seo-dashboard/src/app/api/backlinks/competitors/route.ts`
+- `seo-dashboard/src/app/api/backlinks/link-gap/route.ts`
+- `seo-dashboard/src/app/api/backlinks/outreach/route.ts`
+- `seo-dashboard/src/app/api/backlinks/linkbait/route.ts`
+
+**Migrations Supabase :**
+- Table `backlink_profiles` (site_key, total_backlinks, referring_domains, domain_rank, spam_score, last_updated)
+- Table `referring_domains` (site_key, referring_domain, backlinks_count, domain_rank, first_seen, last_seen)
+- Table `backlinks` (site_key, referring_url, target_url, anchor_text, dofollow, first_seen, last_seen)
+- Table `outreach_campaigns` (site_key, target_domain, contact_email, email_draft, status, dates)
+- Table `directory_submissions` (site_key, directory_name, directory_url, status, submitted_at)
+
+**Fichiers à modifier :**
+- `seo-dashboard/src/components/Nav.tsx` (ajouter lien Backlinks)
+- `seo-dashboard/src/app/page.tsx` (overview backlinks cards)
+- `seo-dashboard/src/app/api/overview/route.ts` (stats backlinks)
+
+**Coût DataForSEO estimé :** ~1-2€/mois pour 6 sites (Summary + Competitors + Timeseries hebdo)
+
+---
+
+## Phase 10 — Rank Tracking quotidien (Semaine 5-6)
+
+### 10.1 Collecte quotidienne des positions (DataForSEO SERP API)
+- [ ] Cron quotidien 7h : check les keywords prioritaires par site
+- [ ] Utiliser DataForSEO `SERP: Google Organic Task Post` (async, ~$0.002/req)
+  - Workflow : POST task → attendre callback → GET résultat
+  - Plus économique que le mode Live pour du batch quotidien
+- [ ] Sélection des keywords à tracker :
+  - Tous les `main_keyword` des clusters status `published` (auto)
+  - Keywords manuels ajoutés depuis le dashboard (table dédiée)
+  - Max ~100 keywords par site pour maîtriser le coût
+- [ ] Paramètres : `location_code: 2250` (France), `language_code: "fr"`, `device: "mobile"` (mobile-first)
+- [ ] Stocker : keyword, position, URL qui ranke, featured_snippet (oui/non), date
+
+### 10.2 Migration Supabase
+- [ ] Table `rank_tracking_keywords` :
+  - `id`, `site_key`, `keyword`, `source` (auto/manual), `created_at`, `active` (boolean)
+- [ ] Table `rank_tracking_daily` :
+  - `id`, `keyword_id`, `position` (nullable si pas dans top 100), `url`, `featured_snippet`, `date`
+  - Index composé sur `(keyword_id, date)` pour les requêtes temporelles
+- [ ] Vue `v_rank_movers` : compare position J vs J-1, calcule le delta
+
+### 10.3 Page dashboard `/rankings`
+- [ ] Nouveau lien nav "Rankings"
+- [ ] **Vue tableau** : keyword, position actuelle, delta J-1, delta J-7, delta J-30, URL, featured snippet
+  - Couleur : vert si montée, rouge si chute, gris si stable
+  - Tri par delta (plus grosses variations en premier)
+- [ ] **Vue "Movers"** : top 10 montées + top 10 chutes du jour (mise en avant)
+- [ ] **Graphe courbe par keyword** : évolution position sur 30/90 jours
+  - Axe Y inversé (position 1 en haut)
+  - Clic sur un keyword → affiche sa courbe
+  - Multi-select : comparer 2-5 keywords sur le même graphe
+- [ ] **Distribution par plage** : camembert #1-3 / #4-10 / #11-20 / #21-50 / #50+
+  - Comparaison avec la semaine précédente (progression globale)
+- [ ] Filtre par site (SiteFilter existant)
+- [ ] Filtre par plage de positions
+- [ ] Bouton "Ajouter keyword" pour tracking manuel
+
+### 10.4 Alertes et notifications
+- [ ] Alerte si chute > 3 positions sur un keyword avec impressions > 100/mois
+- [ ] Alerte si un keyword sort du top 20 (était dedans la veille)
+- [ ] Alerte positive : nouveau keyword entre en top 10
+- [ ] Alertes visibles sur l'overview dashboard
+- [ ] Option : notification Telegram pour les alertes critiques
+
+### 10.5 Lien avec les autres phases
+- [ ] Sur `/pages/[id]` (Phase 1) : section Rankings avec les keywords qui trackent cette page + courbes
+- [ ] Sur `/backlinks` (Phase 9) : corrélation acquisition backlink → évolution position
+- [ ] Sur `/gsc` (Phase 5) : comparer données GSC (retard 2-3j) vs rank tracking (temps réel)
+- [ ] Sur l'overview (Phase 8) : widgets "Keywords en top 3", "Top movers aujourd'hui"
+
+### 10.6 Gestion du budget
+- [ ] Dashboard affiche le coût estimé du mois en cours (nb keywords × 30 × $0.002)
+- [ ] Limite configurable par site (ex: max 50 keywords garage, 100 keywords carrosserie)
+- [ ] Auto-désactivation des keywords qui n'ont jamais ranké en top 100 après 30 jours
+
+**Fichiers à créer :**
+- `seo-dashboard/src/app/rankings/page.tsx`
+- `seo-dashboard/src/app/api/rankings/route.ts` (GET positions + trends)
+- `seo-dashboard/src/app/api/rankings/keywords/route.ts` (GET/POST keywords à tracker)
+- `seo-dashboard/src/app/api/rankings/check/route.ts` (POST lance un check manuel)
+- `seo-automation/src/jobs/daily-rank-tracking.ts` (cron quotidien)
+
+**Fichiers à modifier :**
+- `seo-dashboard/src/components/Nav.tsx` (ajouter lien Rankings)
+- `seo-dashboard/src/app/page.tsx` (overview widgets rankings)
+- `seo-dashboard/src/app/pages/[id]/page.tsx` (section rankings par page)
+- `seo-automation/scripts/setup-crons.sh` (ajouter le cron daily rank tracking)
+
+**Coût DataForSEO estimé :** 100 keywords × 6 sites × 30 jours × $0.002 = **~$3.60/mois** (mode Task Post async)
+
+---
+
+## Ordre d'exécution (mis à jour)
+
+```
+Phase 0 (urgence pages vides)   ██████████  → CRITIQUE : éviter pénalité Google
+Phase 1 (vue/édition pages)     ████████░░  → VOIR ce qui existe
+Phase 2 (briefs + génération)   ████████░░  → PRODUIRE du vrai contenu
+Phase 3 (nettoyage clusters)    ██████░░░░  → PRIORISER les bons keywords
+Phase 4 (actions cannib)        ████░░░░░░  → RÉSOUDRE les conflits
+Phase 5 (GSC)                   ████████░░  → MESURER la performance
+Phase 6 (pipeline amélioré)     ████░░░░░░  → FLUIDIFIER le workflow
+Phase 7 (maillage interne)      ██████░░░░  → VISUALISER le cocon
+Phase 8 (overview + polish)     ████░░░░░░  → UTILISER confortablement
+Phase 9 (backlinks)             ████████░░  → ACQUÉRIR de l'autorité
+Phase 10 (rank tracking)        ████████░░  → SUIVRE les positions en temps réel
+```
+
+---
+
 ## Risques et mitigations
 
 | Risque | Mitigation |
