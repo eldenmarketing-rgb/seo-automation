@@ -27,6 +27,8 @@ import { isAuthorized, isAdmin, getSiteForChat } from './permissions.js';
 export interface SessionData {
   awaitingInput?: string;
   context?: Record<string, unknown>;
+  /** Site sélectionné par l'admin pour /voiture (les groupes clients sont liés à leur site). */
+  carSiteKey?: string;
 }
 
 export type BotContext = Context & SessionFlavor<SessionData>;

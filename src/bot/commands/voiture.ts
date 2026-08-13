@@ -1,17 +1,80 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { BotContext } from '../index.js';
-import { sites } from '../../../config/sites.js';
+import { sites, SiteConfig } from '../../../config/sites.js';
 import { triggerDeploy } from '../../deployers/vercel-deploy.js';
 import * as logger from '../../utils/logger.js';
-import { canAccessSite } from '../permissions.js';
+import { canAccessSite, getSiteForChat, isAdmin } from '../permissions.js';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, createWriteStream, unlinkSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import https from 'https';
 import http from 'http';
 
-const SITE_KEY = 'voitures';
-const site = sites[SITE_KEY];
+/**
+ * Sites concessionnaires pilotés par /voiture — un client par site key.
+ * Chaque groupe Telegram est lié à UN site via TELEGRAM_GROUP_SITES : un
+ * client ne peut jamais lire ni modifier l'inventaire d'un autre.
+ */
+const CAR_SITE_KEYS = ['voitures', 'okaz'];
+
+/**
+ * Résout le site sur lequel porte la commande.
+ * - Groupe client : son site, imposé, non contournable.
+ * - Admin : le site choisi via le sélecteur (mémorisé en session).
+ * Retourne undefined si aucun site n'est déterminé.
+ */
+function resolveSite(ctx: BotContext): SiteConfig | undefined {
+  const chatId = ctx.chat?.id?.toString() || '';
+
+  const groupSiteKey = getSiteForChat(chatId);
+  if (groupSiteKey) {
+    return CAR_SITE_KEYS.includes(groupSiteKey) ? sites[groupSiteKey] : undefined;
+  }
+
+  if (isAdmin(chatId)) {
+    const sessionKey = ctx.session.carSiteKey;
+    if (sessionKey && CAR_SITE_KEYS.includes(sessionKey)) return sites[sessionKey];
+  }
+
+  return undefined;
+}
+
+/** Clavier de choix du client — admin uniquement. */
+function buildSiteKeyboard(): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (const key of CAR_SITE_KEYS) {
+    kb.text(`🚗 ${sites[key].name}`, `voiture_site:${key}`).row();
+  }
+  return kb;
+}
+
+/**
+ * Résout le site pour un handler, et répond à l'utilisateur si impossible.
+ * Retourne undefined quand le handler doit s'arrêter.
+ */
+async function requireSite(ctx: BotContext): Promise<SiteConfig | undefined> {
+  const chatId = ctx.chat?.id?.toString() || '';
+  const site = resolveSite(ctx);
+
+  if (!site) {
+    if (isAdmin(chatId)) {
+      await ctx.reply('🚗 <b>Quel client ?</b>', {
+        parse_mode: 'HTML',
+        reply_markup: buildSiteKeyboard(),
+      });
+    } else {
+      await ctx.reply('⛔ Vous n\'avez pas accès à cette commande.');
+    }
+    return undefined;
+  }
+
+  if (!canAccessSite(chatId, site.key)) {
+    await ctx.reply('⛔ Vous n\'avez pas accès à ce site.');
+    return undefined;
+  }
+
+  return site;
+}
 
 interface CarDraft {
   marque?: string;
@@ -77,7 +140,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   });
 }
 
-function getSoldCarsList(): Array<{ slug: string; marque: string; modele: string; prix: number }> {
+function getSoldCarsList(site: SiteConfig): Array<{ slug: string; marque: string; modele: string; prix: number }> {
   try {
     const content = readFileSync(join(site.projectPath, 'data/cars.ts'), 'utf-8');
     const cars: Array<{ slug: string; marque: string; modele: string; prix: number }> = [];
@@ -92,7 +155,7 @@ function getSoldCarsList(): Array<{ slug: string; marque: string; modele: string
   }
 }
 
-function getCarsList(): Array<{ slug: string; marque: string; modele: string; prix: number; disponible: boolean }> {
+function getCarsList(site: SiteConfig): Array<{ slug: string; marque: string; modele: string; prix: number; disponible: boolean }> {
   try {
     const content = readFileSync(join(site.projectPath, 'data/cars.ts'), 'utf-8');
     const cars: Array<{ slug: string; marque: string; modele: string; prix: number; disponible: boolean }> = [];
@@ -107,7 +170,7 @@ function getCarsList(): Array<{ slug: string; marque: string; modele: string; pr
   }
 }
 
-function injectCarIntoDataFile(draft: CarDraft, slug: string): void {
+function injectCarIntoDataFile(site: SiteConfig, draft: CarDraft, slug: string): void {
   const carsFile = join(site.projectPath, 'data/cars.ts');
   let content = readFileSync(carsFile, 'utf-8');
 
@@ -160,7 +223,7 @@ function buildCategoryKeyboard(selected: string[]): InlineKeyboard {
   return kb;
 }
 
-function removeCarFromDataFile(slug: string): boolean {
+function removeCarFromDataFile(site: SiteConfig, slug: string): boolean {
   const carsFile = join(site.projectPath, 'data/cars.ts');
   let content = readFileSync(carsFile, 'utf-8');
   const regex = new RegExp(`\\s*\\{[^}]*slug:\\s*["']${slug}["'][^}]*\\},?`, 'g');
@@ -170,7 +233,7 @@ function removeCarFromDataFile(slug: string): boolean {
   return true;
 }
 
-function setCarAvailability(slug: string, disponible: boolean): boolean {
+function setCarAvailability(site: SiteConfig, slug: string, disponible: boolean): boolean {
   const carsFile = join(site.projectPath, 'data/cars.ts');
   let content = readFileSync(carsFile, 'utf-8');
   const regex = new RegExp(`(slug:\\s*["']${slug}["'][\\s\\S]*?disponible:\\s*)(?:true|false)`, 'g');
@@ -180,7 +243,7 @@ function setCarAvailability(slug: string, disponible: boolean): boolean {
   return true;
 }
 
-function updateCarPrice(slug: string, newPrice: number): boolean {
+function updateCarPrice(site: SiteConfig, slug: string, newPrice: number): boolean {
   const carsFile = join(site.projectPath, 'data/cars.ts');
   let content = readFileSync(carsFile, 'utf-8');
   const regex = new RegExp(`(slug:\\s*["']${slug}["'][\\s\\S]*?prix:\\s*)\\d+`, 'g');
@@ -193,18 +256,15 @@ function updateCarPrice(slug: string, newPrice: number): boolean {
 export function registerVoitureCommand(bot: Bot<BotContext>) {
   // /voiture or /voiture add|list|vendu|prix|suppr
   bot.command('voiture', async (ctx) => {
-    const chatId = ctx.chat?.id?.toString() || '';
-    if (!canAccessSite(chatId, SITE_KEY)) {
-      await ctx.reply('⛔ Vous n\'avez pas accès à cette commande.');
-      return;
-    }
+    const site = await requireSite(ctx);
+    if (!site) return;
 
     const args = (ctx.match as string)?.trim().split(/\s+/) || [];
     const subcommand = args[0]?.toLowerCase();
 
     if (!subcommand || subcommand === 'help') {
       await ctx.reply(
-        `🚗 <b>Gestion véhicules Ideo Car</b>\n\n` +
+        `🚗 <b>Gestion véhicules ${site.name}</b>\n\n` +
         `/voiture add — Ajouter un véhicule\n` +
         `/voiture list — Liste des véhicules\n` +
         `/voiture suppr — Supprimer un véhicule\n` +
@@ -212,14 +272,27 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         `/voiture dispo — Remettre en vente\n` +
         `/voiture prix — Modifier le prix\n` +
         `/voiture archives — Véhicules vendus\n` +
-        `/voiture deploy — Redéployer le site`,
+        `/voiture deploy — Redéployer le site` +
+        (isAdmin(ctx.chat?.id?.toString() || '') ? `\n/voiture client — Changer de client` : ''),
         { parse_mode: 'HTML' }
       );
       return;
     }
 
+    if (subcommand === 'client') {
+      if (!isAdmin(ctx.chat?.id?.toString() || '')) {
+        await ctx.reply('⛔ Réservé à l\'administrateur.');
+        return;
+      }
+      await ctx.reply('🚗 <b>Quel client ?</b>', {
+        parse_mode: 'HTML',
+        reply_markup: buildSiteKeyboard(),
+      });
+      return;
+    }
+
     if (subcommand === 'list') {
-      const cars = getCarsList();
+      const cars = getCarsList(site);
       if (cars.length === 0) {
         await ctx.reply('Aucun véhicule trouvé.');
         return;
@@ -228,12 +301,12 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         const status = c.disponible ? '🟢' : '🔴 VENDU';
         return `${status} <b>${c.marque} ${c.modele}</b> — ${c.prix.toLocaleString('fr-FR')}€\n   <code>${c.slug}</code>`;
       });
-      await ctx.reply(`🚗 <b>Véhicules (${cars.length})</b>\n\n${lines.join('\n\n')}`, { parse_mode: 'HTML' });
+      await ctx.reply(`🚗 <b>${site.name} — véhicules (${cars.length})</b>\n\n${lines.join('\n\n')}`, { parse_mode: 'HTML' });
       return;
     }
 
     if (subcommand === 'vendu') {
-      const cars = getCarsList().filter(c => c.disponible);
+      const cars = getCarsList(site).filter(c => c.disponible);
       if (cars.length === 0) { await ctx.reply('Aucun véhicule en vente.'); return; }
 
       const kb = new InlineKeyboard();
@@ -247,7 +320,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'dispo') {
-      const sold = getSoldCarsList();
+      const sold = getSoldCarsList(site);
       if (sold.length === 0) { await ctx.reply('Aucun véhicule vendu/archivé.'); return; }
 
       const kb = new InlineKeyboard();
@@ -261,7 +334,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'prix') {
-      const cars = getCarsList().filter(c => c.disponible);
+      const cars = getCarsList(site).filter(c => c.disponible);
       if (cars.length === 0) { await ctx.reply('Aucun véhicule.'); return; }
 
       const kb = new InlineKeyboard();
@@ -275,7 +348,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'archives') {
-      const sold = getSoldCarsList();
+      const sold = getSoldCarsList(site);
       if (sold.length === 0) {
         await ctx.reply('Aucun véhicule vendu/archivé.');
         return;
@@ -288,7 +361,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'suppr') {
-      const cars = getCarsList().filter(c => c.disponible);
+      const cars = getCarsList(site).filter(c => c.disponible);
       if (cars.length === 0) { await ctx.reply('Aucun véhicule à supprimer.'); return; }
 
       const kb = new InlineKeyboard();
@@ -302,21 +375,43 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'deploy') {
-      await ctx.reply('🚀 Déploiement en cours...');
-      const ok = await triggerDeploy(SITE_KEY);
+      await ctx.reply(`🚀 Déploiement de ${site.name} en cours...`);
+      const ok = await triggerDeploy(site.key);
       await ctx.reply(ok ? '✅ Déploiement lancé !' : '❌ Échec du déploiement.');
       return;
     }
 
     if (subcommand === 'add') {
-      // Start the add flow
+      // Start the add flow — le site est figé dans le contexte pour que le
+      // brouillon ne puisse pas changer de client en cours de route.
       ctx.session.awaitingInput = 'voiture_add';
-      ctx.session.context = { step: 'marque', draft: { images: [] } };
+      ctx.session.context = { step: 'marque', draft: { images: [] }, siteKey: site.key };
       await ctx.reply(STEP_PROMPTS.marque, { parse_mode: 'HTML' });
       return;
     }
 
     await ctx.reply(`Commande inconnue: "${subcommand}". Tape /voiture help`);
+  });
+
+  // Sélection du client (admin uniquement)
+  bot.callbackQuery(/^voiture_site:(.+)$/, async (ctx) => {
+    const key = ctx.match![1];
+    await ctx.answerCallbackQuery();
+
+    if (!isAdmin(ctx.chat?.id?.toString() || '')) {
+      await ctx.reply('⛔ Réservé à l\'administrateur.');
+      return;
+    }
+    if (!CAR_SITE_KEYS.includes(key)) {
+      await ctx.reply('❌ Client inconnu.');
+      return;
+    }
+
+    ctx.session.carSiteKey = key;
+    await ctx.reply(
+      `✅ Client actif : <b>${sites[key].name}</b>\n\nTape /voiture pour voir les actions.`,
+      { parse_mode: 'HTML' }
+    );
   });
 
   // Carburant inline keyboard
@@ -394,7 +489,14 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     const draft = ctx.session.context?.draft as CarDraft;
     if (!draft) return;
 
-    await ctx.reply('⏳ Ajout en cours...');
+    // Site figé au démarrage du flow (fallback : résolution normale)
+    const flowSiteKey = ctx.session.context?.siteKey as string | undefined;
+    const site = (flowSiteKey && CAR_SITE_KEYS.includes(flowSiteKey))
+      ? sites[flowSiteKey]
+      : await requireSite(ctx);
+    if (!site) return;
+
+    await ctx.reply(`⏳ Ajout en cours sur ${site.name}...`);
 
     try {
       const slug = generateSlug(draft);
@@ -409,7 +511,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       }
 
       // Inject into data file
-      injectCarIntoDataFile(draft, slug);
+      injectCarIntoDataFile(site, draft, slug);
 
       // Git commit + push
       try {
@@ -420,10 +522,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       }
 
       // Deploy
-      const deployed = await triggerDeploy(SITE_KEY);
+      const deployed = await triggerDeploy(site.key);
 
       await ctx.reply(
-        `✅ <b>${draft.marque} ${draft.modele} ${draft.annee}</b> ajouté !\n\n` +
+        `✅ <b>${draft.marque} ${draft.modele} ${draft.annee}</b> ajouté sur ${site.name} !\n\n` +
         `💰 ${draft.prix?.toLocaleString('fr-FR')}€ — ${draft.kilometrage?.toLocaleString('fr-FR')} km\n` +
         `📸 ${draft.images.length} photo(s)\n` +
         `🔗 Slug: <code>${slug}</code>\n\n` +
@@ -450,14 +552,16 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   bot.callbackQuery(/^voiture_vendu:(.+)$/, async (ctx) => {
     const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
-    if (setCarAvailability(slug, false)) {
+    const site = await requireSite(ctx);
+    if (!site) return;
+    if (setCarAvailability(site, slug, false)) {
       try {
         execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Sold: ${slug}"`, { stdio: 'pipe' });
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
       }
-      const deployed = await triggerDeploy(SITE_KEY);
+      const deployed = await triggerDeploy(site.key);
       await ctx.reply(
         `🔴 <b>${slug}</b> marqué comme vendu !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
         { parse_mode: 'HTML' }
@@ -471,14 +575,16 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   bot.callbackQuery(/^voiture_dispo:(.+)$/, async (ctx) => {
     const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
-    if (setCarAvailability(slug, true)) {
+    const site = await requireSite(ctx);
+    if (!site) return;
+    if (setCarAvailability(site, slug, true)) {
       try {
         execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Restore: ${slug}"`, { stdio: 'pipe' });
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
       }
-      const deployed = await triggerDeploy(SITE_KEY);
+      const deployed = await triggerDeploy(site.key);
       await ctx.reply(
         `🟢 <b>${slug}</b> remis en vente !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
         { parse_mode: 'HTML' }
@@ -492,9 +598,11 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   bot.callbackQuery(/^voiture_prix:(.+)$/, async (ctx) => {
     const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
+    const site = await requireSite(ctx);
+    if (!site) return;
     ctx.session.awaitingInput = 'voiture_prix';
-    ctx.session.context = { slug };
-    const cars = getCarsList();
+    ctx.session.context = { slug, siteKey: site.key };
+    const cars = getCarsList(site);
     const c = cars.find(x => x.slug === slug);
     await ctx.reply(
       `💰 <b>${c ? `${c.marque} ${c.modele}` : slug}</b> — prix actuel : ${c?.prix.toLocaleString('fr-FR')}€\n\nTapez le nouveau prix :`,
@@ -506,14 +614,16 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   bot.callbackQuery(/^voiture_del:(.+)$/, async (ctx) => {
     const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
-    if (removeCarFromDataFile(slug)) {
+    const site = await requireSite(ctx);
+    if (!site) return;
+    if (removeCarFromDataFile(site, slug)) {
       try {
         execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Remove vehicle: ${slug}"`, { stdio: 'pipe' });
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
       }
-      const deployed = await triggerDeploy(SITE_KEY);
+      const deployed = await triggerDeploy(site.key);
       await ctx.reply(
         `🗑️ <b>${slug}</b> supprimé !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
         { parse_mode: 'HTML' }
@@ -547,8 +657,50 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     await ctx.reply(`📸 Photo ${draft.images.length} reçue. Envoie d'autres photos ou tape "ok" quand c'est fini.`);
   });
 
-  // Text input handler for the add flow
+  // Text input handler for the add + price flows
   bot.on('message:text', async (ctx, next) => {
+    // Nouveau prix attendu après /voiture prix
+    if (ctx.session.awaitingInput === 'voiture_prix') {
+      const slug = ctx.session.context?.slug as string;
+      const siteKey = ctx.session.context?.siteKey as string | undefined;
+      const site = (siteKey && CAR_SITE_KEYS.includes(siteKey)) ? sites[siteKey] : undefined;
+
+      if (!slug || !site) {
+        ctx.session.awaitingInput = undefined;
+        ctx.session.context = undefined;
+        await ctx.reply('❌ Session expirée. Relance /voiture prix.');
+        return;
+      }
+
+      const prix = parseInt(ctx.message.text.replace(/[^\d]/g, ''));
+      if (!prix) {
+        await ctx.reply('❌ Prix invalide. Tape un montant en euros (ex: 8500).');
+        return;
+      }
+
+      ctx.session.awaitingInput = undefined;
+      ctx.session.context = undefined;
+
+      if (!updateCarPrice(site, slug, prix)) {
+        await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
+        return;
+      }
+
+      try {
+        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Price update: ${slug} → ${prix}"`, { stdio: 'pipe' });
+        execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
+      } catch (e) {
+        logger.warn(`Git push failed: ${(e as Error).message}`);
+      }
+
+      const deployed = await triggerDeploy(site.key);
+      await ctx.reply(
+        `💰 <b>${slug}</b> → ${prix.toLocaleString('fr-FR')}€\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
+        { parse_mode: 'HTML' }
+      );
+      return;
+    }
+
     if (ctx.session.awaitingInput !== 'voiture_add') return next();
 
     const step = ctx.session.context?.step as VoitureStep;
@@ -632,7 +784,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
       case 'description':
         if (text.toLowerCase() === 'auto') {
-          draft.description = `${draft.marque} ${draft.modele} ${draft.annee}, ${draft.kilometrage?.toLocaleString('fr-FR')} km, ${draft.carburant}, boîte ${draft.boiteVitesse?.toLowerCase()}. Véhicule en excellent état, entretien suivi. ${draft.couleur ? `Couleur ${draft.couleur}.` : ''} À voir chez Ideo Car à Cabestany.`;
+          const flowSiteKey = ctx.session.context?.siteKey as string | undefined;
+          const flowSite = (flowSiteKey && CAR_SITE_KEYS.includes(flowSiteKey)) ? sites[flowSiteKey] : undefined;
+          const chezQui = flowSite ? ` À voir chez ${flowSite.name} à ${flowSite.city}.` : '';
+          draft.description = `${draft.marque} ${draft.modele} ${draft.annee}, ${draft.kilometrage?.toLocaleString('fr-FR')} km, ${draft.carburant}, boîte ${draft.boiteVitesse?.toLowerCase()}. Véhicule en excellent état, entretien suivi. ${draft.couleur ? `Couleur ${draft.couleur}.` : ''}${chezQui}`;
         } else {
           draft.description = text;
         }
