@@ -207,12 +207,22 @@ function categorize(draft: CarDraft): string {
   return cats.map(c => `"${c}"`).join(', ');
 }
 
-function buildCategoryKeyboard(selected: string[]): InlineKeyboard {
+/**
+ * Catégories retirées du site d'un client : elles ne sont plus proposées à
+ * l'ajout. La valeur reste acceptée par le type CarCategory des sites pour
+ * que les véhicules déjà tagués ne cassent pas le build.
+ */
+const HIDDEN_CATEGORIES: Record<string, string[]> = {
+  okaz: ['4x4'], // page /4x4-suv supprimée du site Okaz Autos 66
+};
+
+function buildCategoryKeyboard(selected: string[], siteKey?: string): InlineKeyboard {
+  const hidden = siteKey ? HIDDEN_CATEGORIES[siteKey] ?? [] : [];
   const categories = [
     { id: '4x4', label: '4x4 & SUV' },
     { id: 'petit-prix', label: 'Petit Prix' },
     { id: 'sport', label: 'Sport & Collection' },
-  ];
+  ].filter(c => !hidden.includes(c.id));
   const kb = new InlineKeyboard();
   for (const cat of categories) {
     const check = selected.includes(cat.id) ? '✅ ' : '';
@@ -456,7 +466,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     await ctx.answerCallbackQuery();
-    await ctx.editMessageReplyMarkup({ reply_markup: buildCategoryKeyboard(draft.categories) });
+    await ctx.editMessageReplyMarkup({ reply_markup: buildCategoryKeyboard(draft.categories, resolveSite(ctx)?.key) });
   });
 
   // Category done → vedette step
@@ -805,7 +815,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
           ctx.session.context!.step = 'categories';
           await ctx.reply(STEP_PROMPTS.categories, {
             parse_mode: 'HTML',
-            reply_markup: buildCategoryKeyboard([]),
+            reply_markup: buildCategoryKeyboard([], resolveSite(ctx)?.key),
           });
         } else if (text.toLowerCase() === 'sans') {
           draft.images = [];
@@ -813,7 +823,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
           ctx.session.context!.step = 'categories';
           await ctx.reply(STEP_PROMPTS.categories, {
             parse_mode: 'HTML',
-            reply_markup: buildCategoryKeyboard([]),
+            reply_markup: buildCategoryKeyboard([], resolveSite(ctx)?.key),
           });
         } else {
           await ctx.reply('📸 Envoie une photo ou tape "ok" quand c\'est fini.');
