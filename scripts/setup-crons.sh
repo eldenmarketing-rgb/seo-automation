@@ -32,6 +32,9 @@ cat >> /tmp/crontab_clean << EOF
 # Weekly GSC sync → gsc_positions (Monday 7:00 AM, avant l'audit) $MARKER
 0 7 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gsc-sync.ts >> $LOG_FILE 2>&1 $MARKER
 
+# Weekly backlog scan — détecteurs SEO + mesures (Monday 7:30 AM, après la sync, via le dashboard pm2) $MARKER
+30 7 * * 1 curl -s -X POST http://localhost:3000/api/backlog/scan >> $LOG_FILE 2>&1 $MARKER
+
 # Weekly GSC audit (Monday 8:00 AM) $MARKER
 0 8 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/weekly-gsc-audit.ts >> $LOG_FILE 2>&1 $MARKER
 

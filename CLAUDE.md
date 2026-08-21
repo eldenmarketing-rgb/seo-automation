@@ -63,10 +63,13 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 **Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`)
 
 ### Pages
-`/` (overview), `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`
+`/` (overview), `/backlog`, `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`
 
 ### API routes
-`/api/overview`, `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE)
+`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST), `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE)
+
+### Module Backlog SEO (meilleure prochaine action, multi-sites)
+Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
 
 ### Module Backlinks (autorité off-page)
 Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
@@ -116,6 +119,9 @@ npm run test-telegram  # Test notifications Telegram
 | Table | Rôle | Colonnes clés |
 |-------|------|---------------|
 | seo_pages | Pages SEO générées | site_key, slug, city, service, content (JSONB), status (draft/published/optimized/error) |
+| opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
+| seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
+| site_profiles | Profil pilotage par site | site_key, scope (local/national), **mode (local/thematic/product)**, niche, triage_instructions |
 | gsc_positions | Données Search Console | site_key, query, page_url, position, clicks, impressions, ctr |
 | optimization_queue | File d'optimisation | page_id, priority, status |
 | automation_logs | Logs des jobs | job_type, site_key, details (JSONB), status |
@@ -126,7 +132,7 @@ npm run test-telegram  # Test notifications Telegram
 | menu_categories | Catégories menu restaurant | site_key, slug, name, display_order |
 | menu_items | Articles menu restaurant | category_id, name, price, allergens[], is_vegetarian, status |
 
-**Vue :** `v_optimization_candidates` — pages entre positions 5-15 (candidats top 3)
+> La vue `v_optimization_candidates` documentée historiquement **n'existe pas** en base — les candidats d'optimisation passent par le backlog (`opportunities`).
 
 ---
 
@@ -134,6 +140,7 @@ npm run test-telegram  # Test notifications Telegram
 
 ```
 0 7 * * 1    Sync GSC → gsc_positions (lundi, avant l'audit) — src/jobs/gsc-sync.ts
+30 7 * * 1   Scan backlog SEO — détecteurs + mesures (curl POST /api/backlog/scan sur le dashboard pm2)
 0 8 * * 1    Audit GSC hebdomadaire (lundi)
 0 22 * * 0   Clustering keywords hebdomadaire (dimanche)
 0 0 * * 0    Rotation logs (>10MB)
