@@ -43,6 +43,9 @@ cat >> /tmp/crontab_clean << EOF
 
 # monthly-optimize DÉSACTIVÉ — utilisait l'API Anthropic (crédits épuisés) ; optimisations en session CLI $MARKER
 
+# Monthly backlinks verification via DataForSEO (1er du mois, 9h) $MARKER
+0 9 1 * * curl -s -X POST http://localhost:3000/api/backlinks/verify >> $LOG_FILE 2>&1 $MARKER
+
 # Log rotation (weekly) $MARKER
 0 0 * * 0 if [ -f $LOG_FILE ] && [ \$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE") -gt 10485760 ]; then mv $LOG_FILE ${LOG_FILE}.old; touch $LOG_FILE; fi $MARKER
 EOF
