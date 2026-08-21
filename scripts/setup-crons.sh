@@ -27,8 +27,10 @@ crontab -l 2>/dev/null | grep -v "$MARKER" > /tmp/crontab_clean || true
 cat >> /tmp/crontab_clean << EOF
 
 # ── SEO Automation System ─────────────────────────────── $MARKER
-# Daily page generation (6:00 AM) $MARKER
-0 6 * * * cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/daily-generate.ts >> $LOG_FILE 2>&1 $MARKER
+# daily-generate DÉSACTIVÉ — génération human-in-the-loop via le dashboard $MARKER
+
+# Weekly GSC sync → gsc_positions (Monday 7:00 AM, avant l'audit) $MARKER
+0 7 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gsc-sync.ts >> $LOG_FILE 2>&1 $MARKER
 
 # Weekly GSC audit (Monday 8:00 AM) $MARKER
 0 8 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/weekly-gsc-audit.ts >> $LOG_FILE 2>&1 $MARKER
@@ -36,8 +38,7 @@ cat >> /tmp/crontab_clean << EOF
 # Weekly keyword clustering (Sunday 10:00 PM) $MARKER
 0 22 * * 0 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/weekly-clustering.ts >> $LOG_FILE 2>&1 $MARKER
 
-# Monthly content optimization (1st of month, 10:00 AM) $MARKER
-0 10 1 * * cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/monthly-optimize.ts >> $LOG_FILE 2>&1 $MARKER
+# monthly-optimize DÉSACTIVÉ — utilisait l'API Anthropic (crédits épuisés) ; optimisations en session CLI $MARKER
 
 # Log rotation (weekly) $MARKER
 0 0 * * 0 if [ -f $LOG_FILE ] && [ \$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE") -gt 10485760 ]; then mv $LOG_FILE ${LOG_FILE}.old; touch $LOG_FILE; fi $MARKER

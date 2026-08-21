@@ -8,10 +8,13 @@ const serviceKey = process.env.SUPABASE_SERVICE_KEY!;
 const accessToken = process.env.SUPABASE_ACCESS_TOKEN!;
 const projectRef = url.replace('https://', '').split('.')[0];
 
+const sqlFile = process.argv[2] || 'src/db/migration-new-tables.sql';
+
 async function run() {
-  const sql = readFileSync('src/db/migration-new-tables.sql', 'utf-8');
-  
+  const sql = readFileSync(sqlFile, 'utf-8');
+
   console.log(`Project: ${projectRef}`);
+  console.log(`Fichier : ${sqlFile}`);
   console.log('Executing migration via Management API...\n');
 
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {

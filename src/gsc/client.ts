@@ -109,6 +109,57 @@ export async function fetchGscData(
 }
 
 /**
+ * Fetch a date range for a known GSC property URL, with startRow pagination.
+ * Used by the gsc-sync job (backfill + weekly sync). Unlike fetchGscData,
+ * the property URL is passed directly — no guessing, no config/sites.ts.
+ */
+export async function fetchGscRange(
+  siteKey: string,
+  propertyUrl: string,
+  startDate: string,
+  endDate: string,
+): Promise<GscRow[]> {
+  const auth = getAuth();
+  const searchconsole = google.searchconsole({ version: 'v1', auth });
+
+  const rows: GscRow[] = [];
+  const pageSize = 25000;
+  let startRow = 0;
+
+  for (;;) {
+    const response = await searchconsole.searchanalytics.query({
+      siteUrl: propertyUrl,
+      requestBody: {
+        startDate,
+        endDate,
+        dimensions: ['query', 'page', 'date'],
+        rowLimit: pageSize,
+        startRow,
+      },
+    });
+
+    const batch = response.data.rows || [];
+    for (const row of batch) {
+      rows.push({
+        site_key: siteKey,
+        query: row.keys![0] as string,
+        page_url: row.keys![1] as string,
+        date: row.keys![2] as string,
+        position: row.position || 0,
+        impressions: row.impressions || 0,
+        clicks: row.clicks || 0,
+        ctr: row.ctr || 0,
+      });
+    }
+
+    if (batch.length < pageSize) break;
+    startRow += pageSize;
+  }
+
+  return rows;
+}
+
+/**
  * Store GSC data in Supabase gsc_positions table.
  * Upserts to avoid duplicates.
  */

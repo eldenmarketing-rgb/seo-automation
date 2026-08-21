@@ -1,6 +1,6 @@
 # CLAUDE.md — SEO Automation System
 > Projet : Réseau multi-sites SEO local automatisé — Pyrénées-Orientales (66)
-> Stack : Claude Code + Supabase + GitHub + Vercel + Telegram bot (Grammy)
+> Stack : Claude Code + Supabase + GitHub + Vercel + SEO Dashboard + Telegram bot (Grammy)
 > VPS : OVH Ubuntu 24.04 — 4 vCores / 8 GB RAM
 > GitHub : github.com/eldenmarketing-rgb/seo-automation
 > Owner : Elden (@eldenmarketing-rgb)
@@ -9,7 +9,10 @@
 
 ## Contexte Projet
 
-Système d'automatisation SEO autonome pilotant un réseau de 6 sites Next.js locaux ciblant des niches artisans dans les Pyrénées-Orientales (66). Objectif : générer des leads qualifiés convertis exclusivement via appels téléphoniques. Les sites rankés seront loués à des artisans locaux (loyer fixe mensuel). Telegram (Grammy) est l'interface de contrôle principale.
+Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux ciblant des niches artisans dans les Pyrénées-Orientales (66). Objectif : générer des leads qualifiés convertis exclusivement via appels téléphoniques. Les sites rankés seront loués à des artisans locaux (loyer fixe mensuel).
+
+**Interface de gestion SEO :** SEO Dashboard (Next.js) à `/home/ubuntu/sites/seo-dashboard` — keywords, pages, clusters, cannibalisation, pipeline, génération.
+**Bot Telegram (Grammy) :** toujours actif pour `/voiture` (ajout véhicule) et `/produit` (catalogue restaurant).
 
 **Sites dans le réseau :**
 | Site | Domaine | Schema.org | Projet local |
@@ -30,30 +33,66 @@ Système d'automatisation SEO autonome pilotant un réseau de 6 sites Next.js lo
 
 ---
 
-## État Actuel du Système (Mars 2026)
+## Stratégie SEO (avril 2026)
 
-### 100% opérationnel
-- Bot Telegram Grammy — 16 commandes fonctionnelles
-- Génération SEO via Claude API (`claude-sonnet-4-20250514`, max 8192 tokens) — 6 templates, matrice 42 villes x services
-- Supabase — schéma complet (9 tables + 1 vue), data layer CRUD complet
-- Google Search Console — auth par service account JSON, client API, analyse, optimisation CTR
-- Jobs cron — 3 jobs automatisés + rotation logs
-- Git + GitHub privé (eldenmarketing-rgb/seo-automation) — initialisé mars 2026
-- Maillage interne automatique — liens injectés dans les prompts Claude
-- Injection automatique mots-clés longue traîne via Google Suggest
-- Schema.org JSON-LD automatique (FAQPage + type métier)
-- Uptime monitoring — boucle toutes les 5 min dans le bot
+### Pages service (carrosserie, garage)
+- Pages SERVICE par prestation suffixées -perpignan (débosselage, peinture, pare-chocs, etc.)
+- Pages ville supprimées (contenu dupliqué, aucune ne rank) — 301 vers page principale
+- 800+ mots, contenu expert, schema Service + LocalBusiness, CTA téléphone
 
-### Incomplet
-- Deploy hooks Vercel manquants : **Carrosserie**, **Massage**
-- Groupes Telegram manquants : **Garage**, **Carrosserie**, **Massage**, **VTC**
-- `dataStrategy` varie par site : `data-files` (garage, carrosserie, voitures, restaurant), `config-only` (massage), `create-dynamic` (vtc)
+### Pages produit (voitures)
+- Pages MODÈLE/MARQUE via fiches véhicules enrichies (400+ mots + schema Vehicle)
+- Pas de pages ville
 
-### Manquant
-- Tests unitaires et d'intégration — aucun framework de test
-- CI/CD (GitHub Actions)
-- Monitoring healthcheck des crons
-- Documentation README
+### Pages ville (VTC, livraison alcool uniquement)
+- Pages destination/trajet ou zone de livraison — seuls sites où l'intent géo existe
+
+### Workflow human-in-the-loop
+1. Découverte keywords (DataForSEO) → validation manuelle dans le dashboard
+2. Clustering → approbation manuelle
+3. Analyse IA recommande pages → utilisateur clique "Créer cette page"
+4. Génération produit un draft → review dans /pages
+5. Utilisateur clique "Publier" → Vercel deploy
+**Jamais d'auto-publish ni d'auto-generate sans validation.**
+
+---
+
+## SEO Dashboard
+
+**Repo :** `/home/ubuntu/sites/seo-dashboard` (Next.js, même base Supabase)
+**Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`)
+
+### Pages
+`/` (overview), `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`
+
+### API routes
+`/api/overview`, `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE)
+
+### Module Backlinks (autorité off-page)
+Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
+
+---
+
+## Bot Telegram — Commandes actives
+
+Le bot reste actif pour la gestion des produits et véhicules.
+
+| Commande | Fonction | Accès |
+|----------|----------|-------|
+| /help | Aide contextuelle | Tous |
+| /voiture | Ajout véhicule 12 étapes (photos, data, git commit, deploy) | Tous |
+| /produit | Catalogue restaurant (ajout, prix, dispo, git commit, deploy) | Tous |
+
+Les commandes SEO (/status, /generate, /seo, /keywords, /ctr, /deploy, /index, /ping, /monitor, /edit, /blog, /phone, /claude) existent toujours dans le code mais la gestion SEO se fait via le dashboard.
+
+### Commandes avec écriture fichiers
+- `/voiture` → télécharge photos, écrit `data/cars.ts`, git commit, Vercel deploy
+- `/produit` → écrit `data/catalogue.ts`, git commit, Vercel deploy
+
+### Permissions
+- Admin : chat ID `6240980049` — accès total
+- Groupe voitures : `-5206230663` — accès /help, /voiture
+- Groupe restaurant : `-5057411991` — accès /help, /produit
 
 ---
 
@@ -61,7 +100,6 @@ Système d'automatisation SEO autonome pilotant un réseau de 6 sites Next.js lo
 
 ```bash
 npm run bot            # Lance le bot Telegram (tsx src/bot/index.ts)
-npm run generate       # Job génération quotidienne (tsx src/jobs/daily-generate.ts)
 npm run audit          # Job audit GSC hebdomadaire (tsx src/jobs/weekly-gsc-audit.ts)
 npm run optimize       # Job optimisation mensuelle (tsx src/jobs/monthly-optimize.ts)
 npm run setup-db       # Setup et vérification BDD (tsx scripts/setup-db.ts)
@@ -69,39 +107,7 @@ npm run run            # Point d'entrée principal — status/generate/audit/opt
 npm run test-telegram  # Test notifications Telegram
 ```
 
----
-
-## Bot Telegram — Commandes
-
-| Commande | Fonction | Accès |
-|----------|----------|-------|
-| /help | Aide contextuelle (admin vs groupe) | Tous |
-| /status | Progression matrice ville x service, checks env | Admin |
-| /generate | Génération pages SEO via Claude (batch, keyboard UI) | Admin |
-| /blog | Articles de blog IA via Claude | Admin |
-| /deploy | Déploiement Vercel (par site) | Admin |
-| /seo | Rapport GSC (positions, CTR, top queries) | Admin |
-| /keywords | Recherche mots-clés court/long tail + suggestions pages | Admin |
-| /ctr | Optimisation CTR pages positions 5-15 | Admin |
-| /index | Vérification indexation (indexed vs total) | Admin |
-| /ping | Indexation instantanée (Google Indexing API + IndexNow) | Admin |
-| /monitor | Uptime de tous les sites | Admin |
-| /edit | Édition inline (meta, H1, hero, intro, sections, FAQ) | Admin |
-| /phone | Mise à jour numéro de téléphone (écrit dans config/) | Admin |
-| /voiture | Ajout véhicule 12 étapes (photos, data, git commit, deploy) | Tous |
-| /produit | Catalogue restaurant (ajout, prix, dispo, git commit, deploy) | Tous |
-| /claude | Requêtes libres à Claude CLI (bash read-only) | Admin |
-
-### Commandes avec écriture fichiers
-- `/phone` → modifie `config/sites.ts` + fichiers config des sites
-- `/voiture` → télécharge photos, écrit `data/cars.ts`, git commit, Vercel deploy
-- `/produit` → écrit `data/catalogue.ts`, git commit, Vercel deploy
-
-### Permissions
-- Admin : chat ID `6240980049` — accès total (toutes commandes)
-- Groupe voitures : `-5206230663` — accès /help, /voiture
-- Groupe restaurant : `-5057411991` — accès /help, /produit
-- Raccourcis texte : "status"/"état", "aide"/"help", "monitor"/"sites", "genere [site] [n]"
+> `npm run generate` (daily-generate) est DÉSACTIVÉ — la génération se fait manuellement via le dashboard (human-in-the-loop).
 
 ---
 
@@ -127,23 +133,17 @@ npm run test-telegram  # Test notifications Telegram
 ## Jobs Cron Automatisés
 
 ```
-0 6 * * *    Génération quotidienne 5 pages/site
+0 7 * * 1    Sync GSC → gsc_positions (lundi, avant l'audit) — src/jobs/gsc-sync.ts
 0 8 * * 1    Audit GSC hebdomadaire (lundi)
-0 10 1 * *   Optimisation mensuelle (1er du mois)
+0 22 * * 0   Clustering keywords hebdomadaire (dimanche)
 0 0 * * 0    Rotation logs (>10MB)
 ```
 Logs : `/var/log/seo-automation.log`
 Install : `bash scripts/setup-crons.sh`
 
-### Workflow du job daily-generate
-1. Génère la matrice ville×service pour chaque site
-2. Vérifie les pages existantes (Supabase + fichiers)
-3. Génère les nouvelles pages via Claude API (priorité : pages ville)
-4. Stocke dans Supabase (status: draft)
-5. Injecte dans les fichiers data du site
-6. Déploie sur Vercel
-7. Demande indexation instantanée (Google Indexing API + IndexNow)
-8. Log les résultats
+> Les crons `daily-generate` et `monthly-optimize` sont DÉSACTIVÉS (appelaient l'API Anthropic — crédits épuisés, l'IA passe par les sessions Claude CLI). Génération et optimisation = human-in-the-loop via dashboard + sessions CLI.
+>
+> **`gsc_positions` = source de vérité historique GSC** (snapshots par site/query/page/date, jamais écrasés). Backfill 16 mois fait le 2026-08-21. Nouveau site : partager la propriété GSC avec le service account puis ajouter le domaine dans `config/gsc-sites.ts`. Backfill : `npx tsx src/jobs/gsc-sync.ts --backfill --site=<key>`.
 
 ---
 
@@ -167,15 +167,11 @@ typescript           ^5.7.0     Compilation
 - Entrer en mode plan pour TOUTE tâche non-triviale (3+ étapes ou décisions d'architecture)
 - Si quelque chose déraille : STOP et re-planifier immédiatement
 
-### 2. Boucle d'Auto-Amélioration
-- Après TOUTE correction : mettre à jour tasks/lessons.md avec le pattern d'erreur
-- Relire tasks/lessons.md au démarrage de chaque session
-
-### 3. Vérification Avant de Clore
+### 2. Vérification Avant de Clore
 - Ne jamais marquer une tâche terminée sans prouver que ça fonctionne
-- Vérifier : build Vercel OK, Telegram bot répond, Supabase requêtes valides
+- Vérifier : build Vercel OK, Supabase requêtes valides, dashboard fonctionnel
 
-### 4. Bug Fixing Autonome
+### 3. Bug Fixing Autonome
 - Face à un bug : corriger directement sans demander à être guidé
 - S'appuyer sur les logs Vercel, erreurs Supabase, logs VPS
 - Zéro interruption de l'utilisateur pour des corrections techniques
@@ -191,7 +187,8 @@ Framework   : Next.js (App Router)
 DB          : Supabase (PostgreSQL + RLS)
 Deploy      : Vercel (deploy hooks par site)
 Versioning  : GitHub (eldenmarketing-rgb/seo-automation)
-Bot         : Grammy ^1.41.1 (Telegram)
+Dashboard   : Next.js 16 / React 19 / Tailwind 4 — local VPS via pm2
+Bot         : Grammy ^1.41.1 (Telegram) — /voiture + /produit
 AI          : Anthropic SDK ^0.39.0 — claude-sonnet-4-20250514
 VPS         : OVH Ubuntu 24.04
 ```
@@ -201,6 +198,8 @@ VPS         : OVH Ubuntu 24.04
 /config/
   sites.ts                     → config centralisée des 6 sites (SiteConfig + ServiceDef)
   cities-66.ts                 → 42 villes avec zones (perpignan/proche/peripherie/eloigne)
+  site-modes.ts                → types et interfaces des modes (local/thématique/produit)
+  site-mode-registry.ts        → config brand/mode par site
   gsc-service-account.json     → IGNORÉ PAR GIT — ne jamais commiter
 /scripts/
   run.ts                       → point d'entrée principal (status/generate/audit/optimize)
@@ -210,23 +209,20 @@ VPS         : OVH Ubuntu 24.04
   check-pages.ts               → diagnostic DB vs fichiers
   check-slugs.ts               → matrice restante à générer
   gsc-auth.ts                  → helper OAuth2 GSC
-  test-gsc.ts                  → test connexion GSC
-  test-keywords.ts             → test recherche mots-clés
-  test-links.ts                → test maillage interne
 /src/
   bot/index.ts                 → point d'entrée bot (Grammy, sessions, auth middleware)
   bot/permissions.ts           → système permissions admin/groupes
-  bot/commands/*.ts            → 16 commandes (1 fichier par commande)
+  bot/commands/*.ts            → commandes bot (voiture, produit, + legacy SEO)
   db/schema.sql                → schéma complet BDD
-  db/migration-new-tables.sql  → migration 6 tables additionnelles
   db/supabase.ts               → client Supabase singleton + CRUD complet
   deployers/vercel-deploy.ts   → trigger deploy hooks Vercel
   deployers/inject-pages.ts    → injection pages dans fichiers data des sites
   deployers/sitemap-ping.ts    → ping sitemap Google
   deployers/indexing.ts        → Google Indexing API + IndexNow
   generators/page-generator.ts → génération via Claude API + schema.org
-  generators/city-service-matrix.ts → matrice ville×service
-  generators/templates/*.ts    → 6 templates (garage, carrosserie, massage, vtc, voitures, restaurant)
+  generators/universal-prompt.ts   → prompt builder universel (remplace 6 templates)
+  generators/universal-matrix.ts   → matrice universelle (local/thématique/produit)
+  generators/universal-schema.ts   → schema.org adaptatif
   gsc/auth.ts                  → authentification GSC (service account)
   gsc/client.ts                → client API GSC (queries, pages, positions sur 28j)
   gsc/analyzer.ts              → analyse des données GSC
@@ -234,11 +230,11 @@ VPS         : OVH Ubuntu 24.04
   gsc/indexation.ts            → vérification indexation
   gsc/optimizer.ts             → optimisation contenu
   gsc/positions.ts             → suivi positions
-  jobs/daily-generate.ts       → job quotidien génération pages
   jobs/weekly-gsc-audit.ts     → job hebdo audit GSC
-  jobs/monthly-optimize.ts     → job mensuel optimisation
-  keywords/research.ts         → recherche mots-clés (Google Suggest)
-  linking/internal-links.ts    → maillage interne automatique
+  jobs/monthly-optimize.ts     → job mensuel optimisation (crée des drafts)
+  keywords/research-v2.ts      → recherche mots-clés (DataForSEO + Google Suggest fallback)
+  keywords/dataforseo.ts       → client API DataForSEO
+  linking/cocooning.ts         → moteur cocon sémantique (pilier → cluster → feuille)
   monitoring/uptime.ts         → vérification uptime sites
   notifications/telegram.ts    → envoi notifications Telegram
   utils/logger.ts              → logger coloré avec timestamps
@@ -247,7 +243,7 @@ VPS         : OVH Ubuntu 24.04
 ```
 
 ### Sécurité — NON NÉGOCIABLE
-- `.env` → jamais dans git (contient : Supabase keys, Anthropic key, Vercel hooks, Telegram token, GSC creds)
+- `.env` → jamais dans git (contient : Supabase keys, Anthropic key, Vercel hooks, Telegram token, GSC creds, DataForSEO creds)
 - `config/gsc-service-account.json` → jamais dans git
 - Vérifier .gitignore avant tout nouveau fichier sensible
 - Avant chaque push : `git status` pour vérifier qu'aucun secret n'est stagé
@@ -267,11 +263,11 @@ VPS         : OVH Ubuntu 24.04
 - Title : [Service] [Ville] | [Nom Site] — max 60 caractères
 - Meta description : bénéfice + localisation + CTA implicite — max 155 caractères
 - H1 unique par page avec keyword principal
-- Contenu minimum : 400 mots pour pages service, 800+ pour pages piliers
-- Maillage interne automatique — chaque page liée depuis au moins une page existante
-- Mots-clés longue traîne injectés automatiquement via Google Suggest
+- Contenu minimum : 800+ mots pour pages service/pilier, 500+ pour pages ville
+- Maillage interne automatique via cocon sémantique (pilier → cluster → feuille)
 - Schema.org JSON-LD sur chaque page (type métier + FAQPage)
 - Champ `updatedDate` ajouté automatiquement pour la fraîcheur
+- 60%+ contenu unique par page vs les autres du même set (seuil programmatic SEO)
 
 ### Performance (Core Web Vitals)
 - LCP < 2.5s — images WebP + lazy loading
@@ -280,18 +276,9 @@ VPS         : OVH Ubuntu 24.04
 
 ### URL Structure
 ```
-/[service]/                     → page principale service
-/[service]/[ville]/             → page géolocalisée
-/[service]/[ville]/[quartier]/  → page hyperlocale si pertinent
+/[service]-perpignan/           → page service géolocalisée (carrosserie, garage)
+/[service]/[ville]/             → page géolocalisée (VTC, livraison)
 ```
-
-### Optimisation pages #5-#15 (monthly-optimize)
-- Analyse les requêtes GSC (impressions, position, CTR)
-- Renforcement sémantique + entités NLP
-- Title/meta réécrits pour maximiser CTR
-- Sections allongées à 250-400 mots
-- FAQ enrichies (6 minimum, 60-120 mots/réponse)
-- Ajout trustSignals (E-E-A-T)
 
 ---
 
