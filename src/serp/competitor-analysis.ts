@@ -12,6 +12,7 @@
  */
 
 import * as logger from '../utils/logger.js';
+import { withDfsCache } from '../dataforseo/cache.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -34,10 +35,33 @@ export interface ContentAnalysis {
   url: string;
   wordCount: number;
   headings: string[];          // H2 extraits
+  subHeadings: string[];       // H3 extraits — profondeur de la structure
   keyTerms: string[];          // Termes fréquents (TF)
   hasFaq: boolean;
   faqCount: number;
   hasSchema: boolean;
+  // Structure du contenu : sert à décider ce qu'on exige de NOS pages plutôt
+  // que d'appliquer une règle fixe (un tableau n'a de sens que si la SERP en
+  // montre).
+  tableCount: number;
+  listCount: number;
+  avgSentenceWords: number;
+}
+
+/**
+ * Ce que la SERP dit de la forme attendue. Sert à activer ou désactiver des
+ * critères de notre score : exiger un tableau alors qu'aucun concurrent n'en
+ * a, c'est inventer une règle que Google ne récompense pas.
+ */
+export interface SerpStructure {
+  analyzed: number;
+  withTable: number;
+  withList: number;
+  withH3: number;
+  withFaq: number;
+  avgSections: number;
+  avgSubHeadings: number;
+  avgSentenceWords: number;
 }
 
 export interface SerpInsight {
@@ -47,6 +71,7 @@ export interface SerpInsight {
   missingTerms: string[];      // Termes présents chez les concurrents mais pas dans notre requête
   averageWordCount: number;
   recommendedStructure: string[];  // H2 suggérés
+  structure: SerpStructure;
   promptBlock: string;         // Bloc prêt à injecter dans le prompt
 }
 
@@ -60,20 +85,27 @@ async function fetchSerpResults(query: string): Promise<SerpCompetitor[]> {
 
   try {
     const auth = 'Basic ' + Buffer.from(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`).toString('base64');
-    
-    const response = await fetch(`${API_BASE}/serp/google/organic/live/advanced`, {
-      method: 'POST',
-      headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{
-        keyword: query,
-        location_code: 2250,  // France
-        language_code: 'fr',
-        device: 'desktop',
-        depth: 5,             // Top 5 seulement
-      }]),
+
+    const endpoint = '/serp/google/organic/live/advanced';
+    const body = [{
+      keyword: query,
+      location_code: 2250,  // France
+      language_code: 'fr',
+      device: 'desktop',
+      depth: 5,             // Top 5 seulement
+    }];
+
+    // Chaque brief déclenchait une SERP payante, même sur une requête déjà
+    // achetée la veille. Cache 7 jours (W0.3).
+    const data = await withDfsCache<any>(endpoint, body, async () => {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return await response.json();
     });
 
-    const data = await response.json() as any;
     const items = data.tasks?.[0]?.result?.[0]?.items || [];
 
     return items
@@ -148,7 +180,37 @@ async function analyzePageContent(url: string): Promise<ContentAnalysis | null> 
     // Détecter Schema.org
     const hasSchema = /application\/ld\+json/i.test(html);
 
-    return { url, wordCount, headings, keyTerms, hasFaq, faqCount, hasSchema };
+    // H3 : indique si les concurrents structurent l'intérieur de leurs sections
+    const subHeadings = (html.match(/<h3[^>]*>(.*?)<\/h3>/gi) || [])
+      .map(h => h.replace(/<[^>]+>/g, '').trim())
+      .filter(h => h.length > 3 && h.length < 200);
+
+    // Un tableau de mise en page n'est pas un tableau de données : on exige au
+    // moins deux lignes d'en-tête ou trois lignes de corps.
+    const tableCount = (html.match(/<table[^>]*>[\s\S]*?<\/table>/gi) || [])
+      .filter(t => (t.match(/<th[^>]*>/gi) || []).length >= 2 || (t.match(/<tr[^>]*>/gi) || []).length >= 3)
+      .length;
+
+    // Idem pour les listes : les menus de navigation en sont truffés, on ne
+    // compte que celles qui portent du texte.
+    const listCount = (html.match(/<[uo]l[^>]*>[\s\S]*?<\/[uo]l>/gi) || [])
+      .filter(l => {
+        const items = l.match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
+        if (items.length < 3) return false;
+        const avgLen = items.reduce((n, i) => n + i.replace(/<[^>]+>/g, '').trim().length, 0) / items.length;
+        return avgLen > 25;
+      })
+      .length;
+
+    const sentences = textContent.split(/[.!?…]+\s/).filter(s => s.trim().split(/\s+/).length >= 3);
+    const avgSentenceWords = sentences.length
+      ? Math.round((sentences.reduce((n, s) => n + s.trim().split(/\s+/).length, 0) / sentences.length) * 10) / 10
+      : 0;
+
+    return {
+      url, wordCount, headings, subHeadings, keyTerms, hasFaq, faqCount, hasSchema,
+      tableCount, listCount, avgSentenceWords,
+    };
   } catch (e) {
     logger.warn(`Content analysis failed for ${url}: ${(e as Error).message}`);
     return null;
@@ -200,8 +262,22 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
   const allHeadings = analyses.flatMap(a => a.headings);
   const recommendedStructure = [...new Set(allHeadings)].slice(0, 8);
 
+  const avg = (pick: (a: ContentAnalysis) => number) =>
+    Math.round((analyses.reduce((n, a) => n + pick(a), 0) / analyses.length) * 10) / 10;
+
+  const structure: SerpStructure = {
+    analyzed: analyses.length,
+    withTable: analyses.filter(a => a.tableCount > 0).length,
+    withList: analyses.filter(a => a.listCount > 0).length,
+    withH3: analyses.filter(a => a.subHeadings.length >= 2).length,
+    withFaq: analyses.filter(a => a.faqCount >= 3).length,
+    avgSections: avg(a => a.headings.length),
+    avgSubHeadings: avg(a => a.subHeadings.length),
+    avgSentenceWords: avg(a => a.avgSentenceWords),
+  };
+
   // 4. Construire le bloc prompt
-  const promptBlock = buildSerpPromptBlock(query, competitors, analyses, missingTerms, avgWordCount, recommendedStructure);
+  const promptBlock = buildSerpPromptBlock(query, competitors, analyses, missingTerms, avgWordCount, recommendedStructure, structure);
 
   return {
     query,
@@ -210,6 +286,7 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
     missingTerms,
     averageWordCount: avgWordCount,
     recommendedStructure,
+    structure,
     promptBlock,
   };
 }
@@ -220,7 +297,8 @@ function buildSerpPromptBlock(
   analyses: ContentAnalysis[],
   missingTerms: string[],
   avgWordCount: number,
-  structure: string[]
+  structure: string[],
+  shape: SerpStructure
 ): string {
   const parts: string[] = [];
 
@@ -250,6 +328,16 @@ function buildSerpPromptBlock(
     parts.push('');
     parts.push(`STRUCTURE H2 DES CONCURRENTS (inspire-toi, ne copie pas) :`);
     parts.push(structure.map(h => `- ${h}`).join('\n'));
+  }
+
+  if (shape.analyzed > 0) {
+    parts.push('');
+    parts.push(`FORME OBSERVÉE CHEZ LES ${shape.analyzed} PREMIERS :`);
+    parts.push(`- Tableau de données : ${shape.withTable}/${shape.analyzed}`);
+    parts.push(`- Listes à puces : ${shape.withList}/${shape.analyzed}`);
+    parts.push(`- Sous-titres H3 : ${shape.withH3}/${shape.analyzed} (${shape.avgSubHeadings} en moyenne)`);
+    parts.push(`- Bloc FAQ : ${shape.withFaq}/${shape.analyzed}`);
+    parts.push(`- ${shape.avgSections} sections H2 et ${shape.avgSentenceWords} mots par phrase en moyenne`);
   }
 
   parts.push('');

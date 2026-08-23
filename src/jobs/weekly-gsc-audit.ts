@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { sites } from '../../config/sites.js';
+import { discoverProperties } from '../gsc/property.js';
 import { syncPositions } from '../gsc/positions.js';
 import { findOptimizationCandidates, queueCandidates } from '../gsc/analyzer.js';
 import { log } from '../db/supabase.js';
@@ -13,9 +13,17 @@ export async function weeklyGscAudit() {
   logger.info('=== Weekly GSC Audit ===');
 
   const auditResults: Array<{ site: string; candidates: number; topPage?: string }> = [];
+  const failures: string[] = [];
 
-  for (const [siteKey, site] of Object.entries(sites)) {
-    logger.info(`\n--- Auditing ${siteKey} (${site.domain}) ---`);
+  // N'auditer que les sites dont la propriété GSC est réellement accessible.
+  const properties = await discoverProperties();
+  if (properties.size === 0) {
+    await log('weekly-gsc-audit', 'Aucune propriété GSC accessible — audit impossible', 'error');
+    throw new Error('Aucune propriété Search Console accessible');
+  }
+
+  for (const [siteKey, property] of properties) {
+    logger.info(`\n--- Auditing ${siteKey} (${property}) ---`);
 
     try {
       // 1. Sync latest GSC data
@@ -54,6 +62,7 @@ export async function weeklyGscAudit() {
       const errMsg = (e as Error).message;
       logger.error(`Audit failed for ${siteKey}: ${errMsg}`);
       auditResults.push({ site: siteKey, candidates: 0 });
+      failures.push(`${siteKey}: ${errMsg}`);
       await log('weekly-gsc-audit', `Error: ${errMsg}`, 'error', siteKey);
     }
   }
@@ -62,7 +71,17 @@ export async function weeklyGscAudit() {
   await notifyGscAudit(auditResults);
 
   const duration = Date.now() - startTime;
-  await log('weekly-gsc-audit', 'Completed', 'info', undefined, { sites: auditResults }, duration);
+  const total = auditResults.length;
+  const status = failures.length === total ? 'error' : failures.length > 0 ? 'warning' : 'success';
+  const summary =
+    failures.length === 0
+      ? `Completed — ${total} sites audités`
+      : `Completed avec ${failures.length}/${total} échecs`;
+  await log('weekly-gsc-audit', summary, status, undefined, { sites: auditResults, failures }, duration);
+
+  if (failures.length === total) {
+    throw new Error(`Audit GSC en échec total sur ${total} sites : ${failures[0]}`);
+  }
 
   logger.info('\n=== Audit Summary ===');
   for (const r of auditResults) {

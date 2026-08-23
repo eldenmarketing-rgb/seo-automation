@@ -4,3 +4,8 @@ dist/
 *.log
 config/gsc-service-account.json
 .vercel
+
+# Artefacts de travail non versionnés (inventaire W0 du 2026-08-23)
+_w0-*.ts
+*.zip
+scripts/_tmp-*

@@ -17,6 +17,7 @@
 
 import dotenv from 'dotenv';
 import * as logger from '../utils/logger.js';
+import { withDfsCache } from '../dataforseo/cache.js';
 
 dotenv.config();
 
@@ -76,6 +77,11 @@ export interface KeywordResearchResult {
 // ─── API Caller ──────────────────────────────────────────────
 
 async function callApi<T>(endpoint: string, body: unknown[], retries = 2): Promise<T> {
+  // Cache d'abord : une requête identique déjà achetée n'est pas repayée (W0.3).
+  return withDfsCache(endpoint, body, () => callApiLive<T>(endpoint, body, retries));
+}
+
+async function callApiLive<T>(endpoint: string, body: unknown[], retries = 2): Promise<T> {
   let lastError: Error | null = null;
   
   for (let attempt = 0; attempt <= retries; attempt++) {

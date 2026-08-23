@@ -1,4 +1,5 @@
 import { getSearchConsole } from './auth.js';
+import { resolveProperty } from './property.js';
 import { sites } from '../../config/sites.js';
 import { GscPositionRow, insertGscPositions, getLatestGscDate } from '../db/supabase.js';
 import * as logger from '../utils/logger.js';
@@ -20,11 +21,14 @@ export async function fetchPositions(
   startDate: string,
   endDate: string,
 ): Promise<GscPositionRow[]> {
-  const site = sites[siteKey];
-  if (!site) throw new Error(`Unknown site: ${siteKey}`);
+  const siteUrl = await resolveProperty(siteKey);
+  if (!siteUrl) {
+    throw new Error(
+      `Pas de propriété Search Console accessible pour ${siteKey} — partager le service account dans sa Search Console, puis mapper le domaine dans config/gsc-sites.ts`,
+    );
+  }
 
   const searchConsole = getSearchConsole();
-  const siteUrl = site.domain;
 
   logger.info(`Fetching GSC data for ${siteKey} (${startDate} → ${endDate})...`);
 

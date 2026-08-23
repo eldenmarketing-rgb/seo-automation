@@ -16,11 +16,16 @@ export const gscSites: Record<string, string> = {
   'livraison-alcool-nuit-perpignan.com': 'restaurant', // Mon-Sauveur
   's-party.fr': 'silent-party',
   'debarrashabitat.fr': 'debarras',
-  'okaz-autos66.com': 'okaz',
   'elayarituel.fr': 'elayarituel',
-  // À compléter quand la propriété GSC sera partagée avec le service account :
-  // 'massage-domicile-perpignan.fr': 'massage',
-  // '<domaine-luvala>': 'luvala',
+
+  // ── Mappés mais SANS propriété accessible (vérifié le 2026-08-23) ──
+  // Le résolveur src/gsc/property.ts émet un WARN explicite pour chacun.
+  'okaz-autos66.com': 'okaz',   // propriété non partagée + site non servi (109.234.166.67 renvoie une page d'erreur)
+
+  // ── Pas de propriété possible : site non déployé (vérifié le 2026-08-23) ──
+  // 'retraitebienetre.fr': 'retraite',            // DNS sur parking OVH 213.186.33.5, port 443 fermé
+  // 'massage-domicile-perpignan.fr': 'massage',   // domaine non résolu (aucun DNS)
+  // '<domaine-reprog>': 'reprog',                 // aucun domaine renseigné dans le registre
   // '<domaine-beaudouin>': 'beaudouin',
   // '<domaine-noia>': 'noia',
 };

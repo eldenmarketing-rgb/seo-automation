@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import dotenv from 'dotenv';
-dotenv.config();
+// override: le shell du VPS porte un SUPABASE_ACCESS_TOKEN périmé qui masquait
+// celui du .env et faisait échouer toutes les migrations en 401 (W0.3).
+dotenv.config({ override: true });
 
 const url = process.env.SUPABASE_URL!;
 const serviceKey = process.env.SUPABASE_SERVICE_KEY!;
