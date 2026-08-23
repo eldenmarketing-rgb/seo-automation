@@ -118,7 +118,7 @@ npm run test-telegram  # Test notifications Telegram
 
 | Table | Rôle | Colonnes clés |
 |-------|------|---------------|
-| seo_pages | Pages SEO générées | site_key, slug, city, service, content (JSONB), status (draft/published/optimized/error) |
+| seo_pages | Pages SEO générées | site_key, slug, city, service, content (JSONB), status (draft/published/optimized/error/redirected/brief_ready/**external**), deployed_revision_id |
 | opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
 | seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
 | site_profiles | **Registre des sites — source unique de vérité** | site_key, is_active, name/label/color, domain, gsc_domain, phone/email/adresse, schema_type, scope, **mode (local/thematic/product)**, niche, triage_instructions, delivery_mode + revalidate_url/secret, project_path & fichiers cibles, vercel_hook_env, services (JSONB), seo_keyword_patterns, brand, enabled_intents, content_rules, cocooning |
@@ -133,6 +133,10 @@ npm run test-telegram  # Test notifications Telegram
 | menu_items | Articles menu restaurant | category_id, name, price, allergens[], is_vegetarian, status |
 
 > La vue `v_optimization_candidates` documentée historiquement **n'existe pas** en base — les candidats d'optimisation passent par le backlog (`opportunities`).
+>
+> **`status = 'external'`** : la page existe en ligne mais c'est le **code du site** qui la rend, pas le CMS. Sur carrossier-pro, `app/[service]/page.tsx` cherche `siteConfig.services` (`lib/config.ts`) avant `getCmsPage()` — trois slugs présents des deux côtés étaient servis depuis le fichier TypeScript pendant que le dashboard prétendait les publier. Ces pages restent dans l'inventaire (le backlog SEO les voit) mais la publication les refuse.
+>
+> **`deployed_revision_id`** ne se pose qu'après constat en ligne (`confirmDeployed`, dashboard `lib/publish.ts`) : on relit l'URL et on compare le `<h1>` rendu, le `<title>` et la meta description à ce que dit la base. Un 200 de la route de revalidation ne prouve rien — la propagation CDN prend 1 à 2 s.
 
 ---
 
