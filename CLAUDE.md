@@ -108,6 +108,7 @@ npm run optimize       # Job optimisation mensuelle (tsx src/jobs/monthly-optimi
 npm run setup-db       # Setup et vérification BDD (tsx scripts/setup-db.ts)
 npm run run            # Point d'entrée principal — status/generate/audit/optimize
 npm run test-telegram  # Test notifications Telegram
+npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — simulation par défaut, --apply écrit
 ```
 
 > `npm run generate` (daily-generate) est DÉSACTIVÉ — la génération se fait manuellement via le dashboard (human-in-the-loop).
@@ -123,6 +124,7 @@ npm run test-telegram  # Test notifications Telegram
 | seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
 | site_profiles | **Registre des sites — source unique de vérité** | site_key, is_active, name/label/color, domain, gsc_domain, phone/email/adresse, schema_type, scope, **mode (local/thematic/product)**, niche, triage_instructions, delivery_mode + revalidate_url/secret, project_path & fichiers cibles, vercel_hook_env, services (JSONB), seo_keyword_patterns, brand, enabled_intents, content_rules, cocooning |
 | gsc_positions | Données Search Console | site_key, query, page_url, position, clicks, impressions, ctr |
+| crawl_results | **Faits par URL + funnel d'indexation** (B2) — une ligne par URL et par passage, lire via `v_crawl_latest` | site_key, url, page_id, expected_state (indexable/redirected/draft/out_of_scope), http_status, redirect_chain, indexable, canonical, in_sitemap, links_in/out, click_depth, content_hash, gsc_verdict/coverage_state/last_crawl, funnel_stage, issues[] |
 | optimization_queue | File d'optimisation | page_id, priority, status |
 | automation_logs | Logs des jobs | job_type, site_key, details (JSONB), status |
 | bot_settings | Config par site | site_key, phone, address, horaires (JSONB), promo_text, gbp_link |
@@ -224,6 +226,8 @@ VPS         : OVH Ubuntu 24.04
   run-migration.ts             → migration via Supabase Management API
   check-pages.ts               → diagnostic DB vs fichiers
   check-slugs.ts               → matrice restante à générer
+  crawl.ts                     → crawl + indexation de tous les sites (--site=, --apply, --no-inspect)
+  import-inventaire.ts         → import des pages réelles des sites (sitemap → seo_pages en `external`)
   gsc-auth.ts                  → helper OAuth2 GSC
 /src/
   bot/index.ts                 → point d'entrée bot (Grammy, sessions, auth middleware)
@@ -240,7 +244,16 @@ VPS         : OVH Ubuntu 24.04
   generators/universal-prompt.ts   → prompt builder universel (remplace 6 templates)
   generators/universal-matrix.ts   → matrice universelle (local/thématique/produit)
   generators/universal-schema.ts   → schema.org adaptatif
+  crawler/index.ts             → **crawl d'un site** (base ∪ sitemap ∪ liens) + funnel d'indexation
+  crawler/fetch.ts             → requêtes HTTP, chaîne de redirection conservée
+  crawler/parse.ts             → extraction des faits HTML (cheerio)
+  crawler/robots.ts            → robots.txt (groupe Googlebot) + sitemaps déclarés
+  crawler/graph.ts             → maillage : liens entrants éditoriaux + profondeur de clic
+  crawler/issues.ts            → anomalies déterministes selon l'état attendu de l'URL
+  crawler/funnel.ts            → étape atteinte dans le funnel d'indexation
+  crawler/scope.ts             → slugs hors périmètre SEO (mentions légales, CGV…)
   gsc/auth.ts                  → authentification GSC (service account)
+  gsc/inspect.ts               → **API URL Inspection** (scope `webmasters`, pas readonly)
   gsc/client.ts                → client API GSC (queries, pages, positions sur 28j)
   gsc/analyzer.ts              → analyse des données GSC
   gsc/ctr-optimizer.ts         → optimisation CTR

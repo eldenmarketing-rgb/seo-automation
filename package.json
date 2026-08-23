@@ -12,11 +12,13 @@
     "run": "tsx scripts/run.ts",
     "test-telegram": "tsx src/notifications/telegram.ts",
     "bot": "tsx src/bot/index.ts",
-    "backfill-intents": "tsx scripts/backfill-intents.ts"
+    "backfill-intents": "tsx scripts/backfill-intents.ts",
+    "crawl": "tsx scripts/crawl.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@supabase/supabase-js": "^2.49.1",
+    "cheerio": "^1.2.0",
     "dotenv": "^16.4.7",
     "googleapis": "^146.0.0",
     "grammy": "^1.41.1",

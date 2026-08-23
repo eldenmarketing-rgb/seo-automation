@@ -32,6 +32,7 @@
 
 import { getSupabase } from '../src/db/supabase.js';
 import { cities66 } from '../config/cities-66.js';
+import { OUT_OF_SCOPE_SLUGS } from '../src/crawler/scope.js';
 
 const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith('--site='))?.split('=')[1];
@@ -41,19 +42,11 @@ const CITY_SLUGS = new Set(cities66.map((c) => c.slug));
 
 /**
  * Pages sans intérêt SEO : elles encombreraient l'inventaire et le backlog
- * proposerait un jour de les optimiser.
+ * proposerait un jour de les optimiser. Liste partagée avec le crawler B2
+ * (`src/crawler/scope.ts`), qui l'utilise pour ne pas les juger ni consommer
+ * du quota d'inspection dessus.
  */
-const IGNORED = [
-  /^mentions-legales/,
-  /^cgu$/,
-  /^cgv$/,
-  /^conditions/,
-  /^politique/,
-  /^confidentialite/,
-  /^plan-du-site$/,
-  /^merci$/,
-  /^404$/,
-];
+const IGNORED = OUT_OF_SCOPE_SLUGS;
 
 interface Discovered {
   slug: string;
