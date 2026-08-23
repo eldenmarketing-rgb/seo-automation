@@ -63,13 +63,22 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 **Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`)
 
 ### Pages
-`/` (overview), `/backlog`, `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`, `/sites`
+`/` (overview), `/backlog`, `/indexation`, `/gsc`, `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`, `/sites`
 
 ### API routes
-`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST), `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH)
+`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST), `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`
 
 ### Module Backlog SEO (meilleure prochaine action, multi-sites)
 Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
+
+### Module Indexation (funnel de découverte)
+Page `/indexation` + `/api/indexation` : lisent **`v_crawl_latest`** (dernier passage du crawler) et
+comptent, sans rien interpréter. Le funnel ne porte que sur les URL `expected_state = 'indexable'` —
+une page redirigée ou hors périmètre a été retirée exprès. Chaque marche est cliquable (liste les URL
+qui ne l'atteignent pas), chaque anomalie filtre, et chaque URL affiche l'action de backlog ouverte
+qui la concerne. Les compteurs restent toujours ceux du réseau entier : filtrer change la liste, jamais
+le diagnostic. Libellés d'étapes et d'anomalies dupliqués dans `src/lib/indexation.ts` (dashboard) —
+tenir à jour avec `src/crawler/types.ts` et `src/crawler/issues.ts`.
 
 ### Module Backlinks (autorité off-page)
 Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
@@ -145,7 +154,8 @@ npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — 
 ## Jobs Cron Automatisés
 
 ```
-0 7 * * 1    Sync GSC → gsc_positions (lundi, avant l'audit) — src/jobs/gsc-sync.ts
+30 6 * * 1   Sync GSC → gsc_positions (lundi, en tête de chaîne) — src/jobs/gsc-sync.ts
+45 6 * * 1   Crawl + funnel d'indexation → crawl_results — scripts/crawl.ts --apply (~1 min/site)
 30 7 * * 1   Scan backlog SEO — détecteurs + mesures (curl POST /api/backlog/scan sur le dashboard pm2)
 0 8 * * 1    Audit GSC hebdomadaire (lundi)
 0 22 * * 0   Clustering keywords hebdomadaire (dimanche)

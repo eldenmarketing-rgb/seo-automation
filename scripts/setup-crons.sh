@@ -30,10 +30,16 @@ cat >> /tmp/crontab_clean << EOF
 # ── SEO Automation System ─────────────────────────────── $MARKER
 # daily-generate DÉSACTIVÉ — génération human-in-the-loop via le dashboard $MARKER
 
-# Weekly GSC sync → gsc_positions (Monday 7:00 AM, avant l'audit) $MARKER
-0 7 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gsc-sync.ts >> $LOG_FILE 2>&1 $MARKER
+# Weekly GSC sync → gsc_positions (Monday 6:30 AM, en tête de chaîne) $MARKER
+30 6 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gsc-sync.ts >> $LOG_FILE 2>&1 $MARKER
 
-# Weekly backlog scan — détecteurs SEO + mesures (Monday 7:30 AM, après la sync, via le dashboard pm2) $MARKER
+# Weekly crawl + funnel d'indexation → crawl_results (Monday 6:45 AM) $MARKER
+# Sans lui, les détecteurs du backlog raisonnent sur un crawl figé : une page $MARKER
+# réparée resterait « inconnue de Google » indéfiniment dans le diagnostic. $MARKER
+# Compter ~1 min par site ; la marge avant le scan de 7h30 est volontaire. $MARKER
+45 6 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx scripts/crawl.ts --apply >> $LOG_FILE 2>&1 $MARKER
+
+# Weekly backlog scan — détecteurs SEO + mesures (Monday 7:30 AM, après la sync ET le crawl, via le dashboard pm2) $MARKER
 # Les identifiants Basic Auth sont lus depuis .env.local du dashboard (jamais dans git) $MARKER
 30 7 * * 1 curl -s -X POST -u "\$(grep '^DASHBOARD_USER=' $DASH_ENV | cut -d= -f2-):\$(grep '^DASHBOARD_PASSWORD=' $DASH_ENV | cut -d= -f2-)" http://localhost:3000/api/backlog/scan >> $LOG_FILE 2>&1 $MARKER
 
