@@ -16,6 +16,13 @@ export async function checkUptime(): Promise<Record<string, boolean>> {
   const results: Record<string, boolean> = {};
 
   for (const [siteKey, site] of Object.entries(sites)) {
+    // A1 : le registre couvre désormais tous les sites du réseau, y compris ceux
+    // qui n'ont pas encore de domaine. Sans URL, il n'y a rien à surveiller.
+    if (!site.domain) {
+      results[siteKey] = true;
+      continue;
+    }
+
     // Skip sites without a deploy hook (not yet deployed)
     const hookEnv = site.vercelHookEnv;
     if (hookEnv && !process.env[hookEnv]) {

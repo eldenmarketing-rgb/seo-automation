@@ -80,7 +80,7 @@ async function run() {
 
     const site = sites[siteKey];
     if (!site) {
-      result.error = `Site "${siteKey}" absent de config/sites.ts — publication impossible (site pas encore déployé ?)`;
+      result.error = `Site "${siteKey}" absent du registre (site_profiles) ou désactivé — publication impossible`;
       result.skipped = sitePages.map((p) => p.slug);
       results.push(result);
       continue;

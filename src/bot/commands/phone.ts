@@ -1,6 +1,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { BotContext } from '../index.js';
 import { sites } from '../../../config/sites.js';
+import { getSupabase } from '../../db/supabase.js';
 import { readFileSync, writeFileSync } from 'fs';
 import * as logger from '../../utils/logger.js';
 
@@ -62,18 +63,12 @@ async function updatePhoneInSite(siteKey: string, newPhone: string): Promise<str
   const site = sites[siteKey];
   const oldPhone = site.phone;
 
-  // 1. Update config/sites.ts
-  const configPath = '/home/ubuntu/sites/seo-automation/config/sites.ts';
-  let configContent = readFileSync(configPath, 'utf-8');
-
-  // Find this site's phone line and replace
-  const phoneRegex = new RegExp(
-    `(${siteKey}:[\\s\\S]*?phone:\\s*')([^']*)(')`,
-  );
-  if (configContent.match(phoneRegex)) {
-    configContent = configContent.replace(phoneRegex, `$1${newPhone}$3`);
-    writeFileSync(configPath, configContent, 'utf-8');
-  }
+  // 1. Registre des sites (A1 : `site_profiles`, plus config/sites.ts)
+  const { error } = await getSupabase()
+    .from('site_profiles')
+    .update({ phone: newPhone, updated_at: new Date().toISOString() })
+    .eq('site_key', siteKey);
+  if (error) throw new Error(`Registre non mis à jour : ${error.message}`);
 
   // 2. Update the site's own config file
   const siteConfigFiles = findSiteConfigFiles(siteKey);

@@ -6,8 +6,9 @@
  * - thematic: topic × intent (formation, guide, blog authority)
  * - product: product × variant (voitures, catalogue, e-commerce)
  * 
- * IMPORTANT: This file extends config/sites.ts — it does NOT replace it.
- * Add these fields to your existing SiteConfig interface.
+ * A1 : ces types décrivent ce que `site_profiles` stocke par site (colonnes
+ * `mode`, `brand`, `enabled_intents`, `content_rules`, `cocooning`, `thematic`,
+ * `product_config`). Les défauts par mode vivent dans `config/mode-defaults.ts`.
  */
 
 // ─── Generation Modes ────────────────────────────────────────
@@ -148,6 +149,6 @@ export interface UniversalPage {
   product?: ProductVariant;
   
   // Commun
-  site: any;  // SiteConfig from existing config/sites.ts
+  site: any;  // SiteConfig, reconstruit depuis site_profiles
   modeConfig: SiteModeConfig;
 }
