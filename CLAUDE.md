@@ -63,10 +63,10 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 **Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`)
 
 ### Pages
-`/` (overview), `/backlog`, `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`
+`/` (overview), `/backlog`, `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`, `/sites`
 
 ### API routes
-`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST), `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE)
+`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST), `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH)
 
 ### Module Backlog SEO (meilleure prochaine action, multi-sites)
 Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
@@ -121,7 +121,7 @@ npm run test-telegram  # Test notifications Telegram
 | seo_pages | Pages SEO générées | site_key, slug, city, service, content (JSONB), status (draft/published/optimized/error) |
 | opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
 | seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
-| site_profiles | Profil pilotage par site | site_key, scope (local/national), **mode (local/thematic/product)**, niche, triage_instructions |
+| site_profiles | **Registre des sites — source unique de vérité** | site_key, is_active, name/label/color, domain, gsc_domain, phone/email/adresse, schema_type, scope, **mode (local/thematic/product)**, niche, triage_instructions, delivery_mode + revalidate_url/secret, project_path & fichiers cibles, vercel_hook_env, services (JSONB), seo_keyword_patterns, brand, enabled_intents, content_rules, cocooning |
 | gsc_positions | Données Search Console | site_key, query, page_url, position, clicks, impressions, ctr |
 | optimization_queue | File d'optimisation | page_id, priority, status |
 | automation_logs | Logs des jobs | job_type, site_key, details (JSONB), status |
@@ -150,7 +150,7 @@ Install : `bash scripts/setup-crons.sh`
 
 > Les crons `daily-generate` et `monthly-optimize` sont DÉSACTIVÉS (appelaient l'API Anthropic — crédits épuisés, l'IA passe par les sessions Claude CLI). Génération et optimisation = human-in-the-loop via dashboard + sessions CLI.
 >
-> **`gsc_positions` = source de vérité historique GSC** (snapshots par site/query/page/date, jamais écrasés). Backfill 16 mois fait le 2026-08-21. Nouveau site : partager la propriété GSC avec le service account puis ajouter le domaine dans `config/gsc-sites.ts`. Backfill : `npx tsx src/jobs/gsc-sync.ts --backfill --site=<key>`.
+> **`gsc_positions` = source de vérité historique GSC** (snapshots par site/query/page/date, jamais écrasés). Backfill 16 mois fait le 2026-08-21. Nouveau site : partager la propriété GSC avec le service account puis renseigner « Domaine GSC » sur la page `/sites` du dashboard (colonne `site_profiles.gsc_domain`). Backfill : `npx tsx src/jobs/gsc-sync.ts --backfill --site=<key>`.
 
 ---
 
@@ -203,10 +203,15 @@ VPS         : OVH Ubuntu 24.04
 ### Structure Fichiers
 ```
 /config/
-  sites.ts                     → config centralisée des 6 sites (SiteConfig + ServiceDef)
-  cities-66.ts                 → 42 villes avec zones (perpignan/proche/peripherie/eloigne)
+  sites.ts                     → chargeur : lit site_profiles (top-level await), expose `sites`
+  site-types.ts                → interfaces SiteConfig + ServiceDef
+  sites.legacy.ts              → SNAPSHOT pré-A1, lu seulement par le seed (à supprimer en A2)
+  mode-defaults.ts             → **règles génériques LOCAL/THEMATIC/PRODUCT** (seul endroit)
   site-modes.ts                → types et interfaces des modes (local/thématique/produit)
-  site-mode-registry.ts        → config brand/mode par site
+  site-mode-registry.ts        → chargeur : mode-defaults surchargé par site_profiles
+  site-mode-registry.legacy.ts → SNAPSHOT pré-A1, lu seulement par le seed
+  gsc-sites.ts                 → chargeur : dérivé de site_profiles.gsc_domain
+  cities-66.ts                 → 42 villes avec zones (perpignan/proche/peripherie/eloigne)
   gsc-service-account.json     → IGNORÉ PAR GIT — ne jamais commiter
 /scripts/
   run.ts                       → point d'entrée principal (status/generate/audit/optimize)
@@ -220,6 +225,7 @@ VPS         : OVH Ubuntu 24.04
   bot/index.ts                 → point d'entrée bot (Grammy, sessions, auth middleware)
   bot/permissions.ts           → système permissions admin/groupes
   bot/commands/*.ts            → commandes bot (voiture, produit, + legacy SEO)
+  sites/registry.ts            → **chargeur unique du registre** (site_profiles → SiteConfig)
   db/schema.sql                → schéma complet BDD
   db/supabase.ts               → client Supabase singleton + CRUD complet
   deployers/vercel-deploy.ts   → trigger deploy hooks Vercel
