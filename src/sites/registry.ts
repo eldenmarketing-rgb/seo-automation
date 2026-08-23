@@ -107,7 +107,9 @@ export function rowToSiteConfig(row: SiteProfileRow): SiteConfig {
     city: str(row.city),
     schemaType: str(row.schema_type, 'LocalBusiness'),
     projectPath: str(row.project_path),
-    dataStrategy: (row.data_strategy as SiteConfig['dataStrategy']) || 'data-files',
+    // Pas de repli sur 'data-files' : un site sans stratégie déclarée serait
+    // devenu publiable par défaut, avec l'écrivain de fichiers d'un autre site.
+    dataStrategy: (row.data_strategy as SiteConfig['dataStrategy']) ?? null,
     serviceDataFile: str(row.service_data_file),
     cityDataFile: str(row.city_data_file),
     slugPageFile: str(row.slug_page_file),

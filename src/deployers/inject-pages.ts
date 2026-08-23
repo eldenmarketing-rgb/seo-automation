@@ -60,19 +60,33 @@ export async function injectPages(siteKey: string, pages: SeoPageRow[]): Promise
   const site = sites[siteKey];
   if (!site) throw new Error(`Unknown site: ${siteKey}`);
 
+  // Un site sans stratégie déclarée n'est pas publiable par le moteur : son
+  // contenu vit en dur dans son dépôt et aucun écrivain ne sait le produire.
+  // Le dire franchement plutôt que renvoyer une liste vide — un échec muet
+  // laissait croire que la publication avait simplement « rien trouvé ».
+  if (!site.dataStrategy) {
+    throw new Error(
+      `Le site "${siteKey}" n'a pas de stratégie de publication : son contenu n'est pas piloté par le moteur. ` +
+      `Renseigner data_strategy sur /sites, ou le passer en mode CMS.`
+    );
+  }
+
   switch (site.dataStrategy) {
     case 'data-files':
       if (siteKey === 'garage') return injectGaragePages(site, pages);
       if (siteKey === 'vtc') return injectVtcPages(site, pages);
       if (siteKey === 'voitures') return injectVoituresPages(site, pages);
       if (siteKey === 'restaurant') return injectRestaurantPages(site, pages);
-      return [];
+      throw new Error(
+        `Aucun écrivain de fichiers pour "${siteKey}" : data_strategy vaut "data-files" mais rien ne sait ` +
+        `écrire dans ${site.serviceDataFile || 'ses fichiers de données'}.`
+      );
     case 'config-only':
       return injectCarrosseriePages(site, pages);
     case 'create-dynamic':
       return injectMassagePages(site, pages);
     default:
-      throw new Error(`Unknown data strategy: ${site.dataStrategy}`);
+      throw new Error(`Stratégie de publication inconnue pour "${siteKey}" : ${site.dataStrategy}`);
   }
 }
 

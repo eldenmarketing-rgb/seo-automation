@@ -19,7 +19,13 @@ export interface SiteConfig {
   city: string;
   schemaType: string;
   projectPath: string;
-  dataStrategy: 'data-files' | 'config-only' | 'create-dynamic';
+  /**
+   * Comment le moteur écrit le contenu dans le dépôt du site.
+   * `null` = le contenu du site n'est pas piloté par le moteur (il vit en dur
+   * dans son code). Ce n'est pas une valeur manquante à remplacer par un défaut :
+   * c'est l'information qu'on ne sait pas publier là.
+   */
+  dataStrategy: 'data-files' | 'config-only' | 'create-dynamic' | null;
   serviceDataFile: string;
   cityDataFile: string;
   slugPageFile: string;
