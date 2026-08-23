@@ -18,7 +18,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { getSearchConsole } from '../gsc/auth.js';
-import { fetchGscRange, storeGscData } from '../gsc/client.js';
+import { fetchGscRange, storeGscData, fetchGscPageRange, storeGscPageData } from '../gsc/client.js';
 import { gscSites } from '../../config/gsc-sites.js';
 import { log } from '../db/supabase.js';
 import * as logger from '../utils/logger.js';
@@ -93,10 +93,15 @@ async function run() {
     let total = 0;
     try {
       for (const [chunkStart, chunkEnd] of monthChunks(start, end)) {
+        // Deux vues, deux vérités complémentaires — voir migration-gsc-page-daily.sql :
+        // la vue par requête dit SUR QUOI la page ranke mais perd les clics des
+        // requêtes anonymisées ; la vue par page dit ce qu'elle rapporte vraiment.
         const rows = await fetchGscRange(siteKey, propertyUrl, chunkStart, chunkEnd);
         const stored = await storeGscData(rows);
+        const pageRows = await fetchGscPageRange(siteKey, propertyUrl, chunkStart, chunkEnd);
+        const storedPages = await storeGscPageData(pageRows);
         total += stored;
-        if (backfill) logger.info(`  ${siteKey} ${chunkStart} → ${chunkEnd} : ${stored} lignes`);
+        if (backfill) logger.info(`  ${siteKey} ${chunkStart} → ${chunkEnd} : ${stored} lignes requête · ${storedPages} lignes page`);
       }
       results[siteKey] = total;
       logger.success(`GSC sync ${siteKey}: ${total} lignes`);

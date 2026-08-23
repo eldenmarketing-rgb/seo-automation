@@ -35,6 +35,17 @@ export interface GscRow {
   ctr: number;
 }
 
+/** Même chose sans la requête : le total réel d'une page (voir fetchGscPageRange). */
+export interface GscPageRow {
+  site_key: string;
+  date: string;
+  page_url: string;
+  position: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+}
+
 /**
  * Fetch Search Console data for a site over a date range.
  * Returns per-query, per-page performance data.
@@ -163,6 +174,81 @@ export async function fetchGscRange(
  * Store GSC data in Supabase gsc_positions table.
  * Upserts to avoid duplicates.
  */
+/**
+ * Trafic par page et par jour, **sans** dimension `query`.
+ *
+ * Indispensable : Google anonymise les requêtes rares, et leurs clics
+ * disparaissent dès qu'on demande la dimension `query`. Sur garage-perpignan.fr,
+ * 20 clics sur 21 étaient ainsi invisibles. Cette vue-ci est complète — c'est
+ * elle qui dit ce qu'une page rapporte réellement.
+ */
+export async function fetchGscPageRange(
+  siteKey: string,
+  propertyUrl: string,
+  startDate: string,
+  endDate: string,
+): Promise<GscPageRow[]> {
+  const auth = getAuth();
+  const searchconsole = google.searchconsole({ version: 'v1', auth });
+
+  const rows: GscPageRow[] = [];
+  const pageSize = 25000;
+  let startRow = 0;
+
+  for (;;) {
+    const response = await searchconsole.searchanalytics.query({
+      siteUrl: propertyUrl,
+      requestBody: {
+        startDate,
+        endDate,
+        dimensions: ['page', 'date'],
+        rowLimit: pageSize,
+        startRow,
+      },
+    });
+
+    const batch = response.data.rows || [];
+    for (const row of batch) {
+      rows.push({
+        site_key: siteKey,
+        page_url: row.keys![0] as string,
+        date: row.keys![1] as string,
+        position: row.position || 0,
+        impressions: row.impressions || 0,
+        clicks: row.clicks || 0,
+        ctr: row.ctr || 0,
+      });
+    }
+
+    if (batch.length < pageSize) break;
+    startRow += pageSize;
+  }
+
+  return rows;
+}
+
+export async function storeGscPageData(rows: GscPageRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const db = getSupabase();
+  let stored = 0;
+
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    const { error } = await db
+      .from('gsc_page_daily')
+      .upsert(chunk, { onConflict: 'site_key,date,page_url' });
+
+    if (error) {
+      logger.error(`GSC page store error: ${error.message}`);
+    } else {
+      stored += chunk.length;
+    }
+  }
+
+  return stored;
+}
+
 export async function storeGscData(rows: GscRow[]): Promise<number> {
   if (rows.length === 0) return 0;
 
