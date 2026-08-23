@@ -104,6 +104,69 @@ async function sitemapUrls(origin: string, declared: string[]): Promise<{ urls: 
   return reached ? { urls } : { urls, error: 'aucun sitemap joignable' };
 }
 
+/**
+ * ─── Alignement de la base sur la réalité constatée ────────────────────────
+ *
+ * Une partie des « écarts base ↔ réalité » n'appelle aucune décision : le crawl
+ * prouve l'état, il n'y a qu'à l'enregistrer. Le 2026-08-23, 27 pages du réseau
+ * étaient dans ce cas (brouillons servis en ligne depuis des mois, pages dites
+ * publiées qui redirigent) et il a fallu un script à la main pour les corriger.
+ * Le crawl le fait maintenant lui-même, à chaque passage.
+ *
+ * Deux règles seulement, et toutes deux sont des constats, jamais des choix :
+ *
+ * 1. la base dit brouillon, l'URL répond 200, elle est indexable **et le site
+ *    la déclare à son propre sitemap** → le site la publie, la base l'ignore.
+ *    Le sitemap est l'exigence qui distingue « publiée » d'une page de test
+ *    laissée accessible.
+ * 2. la base dit publiée, l'URL redirige **et la cible répond 200** → la
+ *    redirection est voulue et elle marche. Si la cible casse, on ne touche à
+ *    rien : c'est un vrai défaut, il doit rester une action.
+ *
+ * Ce qui n'est PAS aligné, exprès : une page publiée qui répond 404 (a-t-elle
+ * disparu ou jamais été déployée ?) et une page dite redirigée qui répond 200
+ * (redirection oubliée, ou landing Ads volontaire ?). Ces deux-là demandent un
+ * arbitrage humain — les deviner ferait mentir la base dans l'autre sens.
+ */
+export interface Alignement {
+  page_id: string;
+  url: string;
+  de: string;
+  vers: string;
+  preuve: string;
+}
+
+/** Le statut prouvé par la réalité, ou `null` s'il n'y a rien à corriger. */
+function statutProuve(
+  row: CrawlRow,
+  statutBase: string,
+  siteEnCms: boolean
+): { statut: string; preuve: string } | null {
+  if (row.expected_state === 'out_of_scope') return null;
+
+  if (['draft', 'brief_ready', 'error'].includes(statutBase)) {
+    if (row.http_status === 200 && row.indexable && row.in_sitemap) {
+      // Sur un site en CMS, une page servie alors que le CMS la dit brouillon
+      // est rendue par le code du site : c'est ce que veut dire `external`.
+      return {
+        statut: siteEnCms ? 'external' : 'published',
+        preuve: 'répond 200, indexable, déclarée au sitemap du site',
+      };
+    }
+    return null;
+  }
+
+  if (['published', 'optimized', 'external'].includes(statutBase)) {
+    if (row.redirect_chain.length > 0 && row.http_status === 200) {
+      const cible = row.final_url || '?';
+      return { statut: 'redirected', preuve: `redirige (${row.redirect_chain.map((c) => c.status).join(' → ')}) vers ${cible}, qui répond 200` };
+    }
+    return null;
+  }
+
+  return null;
+}
+
 export async function crawlSite(
   site: { site_key: string; domain: string },
   opts: CrawlOptions = {}
@@ -311,6 +374,28 @@ export async function crawlSite(
     });
   }
 
+  // ─── Alignement de la base sur ce qui vient d'être constaté ──────────────
+  // Fait AVANT la synthèse : la ligne écrite dans crawl_results doit refléter
+  // l'état corrigé, sinon le funnel de ce passage juge encore la page sur une
+  // vérité qu'on vient de démentir.
+  const { data: profil } = await db
+    .from('site_profiles')
+    .select('delivery_mode')
+    .eq('site_key', site.site_key)
+    .maybeSingle();
+  const siteEnCms = (profil as { delivery_mode?: string } | null)?.delivery_mode === 'cms';
+
+  const alignements: Alignement[] = [];
+  for (const c of crawled) {
+    const dbPage = dbByKey.get(normalizeUrl(c.url));
+    if (!dbPage) continue;
+    const prouve = statutProuve(c.row, dbPage.status, siteEnCms);
+    if (!prouve || prouve.statut === dbPage.status) continue;
+
+    alignements.push({ page_id: dbPage.id, url: c.url, de: dbPage.status, vers: prouve.statut, preuve: prouve.preuve });
+    c.row.expected_state = prouve.statut === 'redirected' ? 'redirected' : 'indexable';
+  }
+
   // ─── Synthèse ────────────────────────────────────────────────────────────
   const hashCounts = new Map<string, number>();
   for (const c of crawled) {
@@ -332,5 +417,6 @@ export async function crawlSite(
     rows: crawled.map((c) => c.row),
     property,
     sitemapError,
+    alignements,
   };
 }

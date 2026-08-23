@@ -135,7 +135,7 @@ npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — 
 | gsc_positions | Données Search Console | site_key, query, page_url, position, clicks, impressions, ctr |
 | crawl_results | **Faits par URL + funnel d'indexation** (B2) — une ligne par URL et par passage, lire via `v_crawl_latest` (= **le dernier passage du site**, pas le dernier état connu de chaque URL : une URL sortie du périmètre sort du diagnostic) | site_key, url, page_id, expected_state (indexable/redirected/draft/out_of_scope), http_status, redirect_chain, indexable, canonical, in_sitemap, links_in/out, click_depth, content_hash, gsc_verdict/coverage_state/last_crawl, funnel_stage, issues[] |
 | optimization_queue | File d'optimisation | page_id, priority, status |
-| automation_logs | Logs des jobs | job_type, site_key, details (JSONB), status |
+| automation_logs | Logs des jobs | **job_name**, **action**, site_key, details (JSONB), status, duration_ms |
 | bot_settings | Config par site | site_key, phone, address, horaires (JSONB), promo_text, gbp_link |
 | page_images | Images des pages | site_key, slug, image_type (ai/real/stock), file_path, alt_text |
 | blog_articles | Articles de blog | site_key, slug, title, content, tags[], status (draft/published) |

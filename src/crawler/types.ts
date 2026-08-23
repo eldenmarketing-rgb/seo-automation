@@ -59,6 +59,8 @@ export interface SiteCrawlResult {
   rows: CrawlRow[];
   property: string | null;
   sitemapError?: string;
+  /** Statuts de `seo_pages` que la réalité constatée dément (voir index.ts). */
+  alignements: Array<{ page_id: string; url: string; de: string; vers: string; preuve: string }>;
 }
 
 /** Étapes du funnel, dans l'ordre. */

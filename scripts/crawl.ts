@@ -125,7 +125,39 @@ async function main() {
       if (list.length > 6) console.log(`        … et ${list.length - 6} autre(s)`);
     }
 
+    // Alignements : la base disait autre chose que ce que le site sert. Ce ne
+    // sont pas des décisions, ce sont des constats — mais on les affiche un par
+    // un, avec leur preuve : une correction silencieuse de la base serait pire
+    // que l'écart qu'elle répare.
+    if (result.alignements.length) {
+      console.log(`   base alignée sur la réalité (${result.alignements.length}) :`);
+      for (const a of result.alignements) {
+        console.log(`     ${pad(new URL(a.url).pathname, 44)} ${a.de} → ${a.vers}`);
+        console.log(`        ${a.preuve}`);
+      }
+    }
+
     if (apply) {
+      for (const a of result.alignements) {
+        const { error: alErr } = await db
+          .from('seo_pages')
+          .update({ status: a.vers, updated_at: new Date().toISOString() })
+          .eq('id', a.page_id);
+        if (alErr) console.log(`     ⚠ alignement ${a.url} : ${alErr.message}`);
+      }
+      if (result.alignements.length) {
+        // La table s'appelle `job_name`/`action`, pas `job_type` — vérifié en base.
+        const { error: logErr } = await db.from('automation_logs').insert({
+          job_name: 'crawl',
+          action: `${result.alignements.length} statut(s) alignés sur la réalité`,
+          site_key: site.site_key,
+          status: 'success',
+          details: { run_id: runId, alignements: result.alignements },
+        });
+        if (logErr) console.log(`     ⚠ journal : ${logErr.message}`);
+        console.log(`   ✅ ${result.alignements.length} statut(s) corrigé(s) dans seo_pages`);
+      }
+
       const payload = rows.map(({ impressions28, fetchError, ...row }) => ({ ...row, run_id: runId }));
       for (let i = 0; i < payload.length; i += 200) {
         const { error: insErr } = await db.from('crawl_results').insert(payload.slice(i, i + 200));
