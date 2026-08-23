@@ -60,6 +60,15 @@ async function run() {
     process.exit(1);
   }
 
+  // A3 : la branche sur laquelle chaque site doit être publié. Sans ça, le push
+  // partait sur la branche courante du dépôt, quelle qu'elle soit.
+  const { data: profiles } = await db
+    .from('site_profiles')
+    .select('site_key, production_branch');
+  const prodBranch = new Map<string, string>(
+    (profiles || []).map((p) => [p.site_key as string, (p.production_branch as string) || 'main'])
+  );
+
   const bySite = new Map<string, SeoPageRow[]>();
   for (const p of pages as SeoPageRow[]) {
     if (!bySite.has(p.site_key)) bySite.set(p.site_key, []);
@@ -82,6 +91,25 @@ async function run() {
     if (!site) {
       result.error = `Site "${siteKey}" absent du registre (site_profiles) ou désactivé — publication impossible`;
       result.skipped = sitePages.map((p) => p.slug);
+      results.push(result);
+      continue;
+    }
+
+    // ── 0bis. La branche doit être celle de production ──────────
+    // W0 a trouvé Site_Garage posé sur une branche de docs : une publication à
+    // ce moment-là aurait poussé le contenu au mauvais endroit. Une mauvaise
+    // branche n'est jamais poussée, même en forçant.
+    const expectedBranch = prodBranch.get(siteKey) || 'main';
+    try {
+      const currentBranch = git(site.projectPath, 'rev-parse', '--abbrev-ref', 'HEAD');
+      if (currentBranch !== expectedBranch) {
+        result.error = `Dépôt sur la branche "${currentBranch}", la production est "${expectedBranch}" — publication bloquée`;
+        result.skipped = sitePages.map((p) => p.slug);
+        results.push(result);
+        continue;
+      }
+    } catch (e) {
+      result.error = `Branche du dépôt illisible : ${(e as Error).message.slice(0, 200)}`;
       results.push(result);
       continue;
     }
@@ -150,8 +178,7 @@ async function run() {
       result.committed = true;
       result.commit = git(cwd, 'rev-parse', '--short', 'HEAD');
 
-      const branch = git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD');
-      git(cwd, 'push', 'origin', branch);
+      git(cwd, 'push', 'origin', expectedBranch);
       result.pushed = true;
     } catch (e) {
       result.error = `Git : ${(e as Error).message.slice(0, 300)}`;
