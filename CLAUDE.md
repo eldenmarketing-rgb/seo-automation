@@ -80,6 +80,17 @@ qui la concerne. Les compteurs restent toujours ceux du réseau entier : filtrer
 le diagnostic. Libellés d'étapes et d'anomalies dupliqués dans `src/lib/indexation.ts` (dashboard) —
 tenir à jour avec `src/crawler/types.ts` et `src/crawler/issues.ts`.
 
+### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
+**Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
+— « Google te montre déjà sur cette requête sans page dédiée » = demande **prouvée sur le domaine**.
+**Site muet** (carrosserie 19 impressions, site neuf, pas de propriété GSC) : repli sur
+`discovered_keywords` **en statut `approved` uniquement** (`src/lib/keyword-detectors.ts` du dashboard).
+Les 22 000 mots-clés bruts de DataForSEO ne déclenchent rien : le tri humain reste obligatoire.
+Une hypothèse ne doit jamais devancer une demande prouvée — impact calculé au CTR du **bas de
+première page**, confiance plafonnée (0,35 max, 0,15 si `kd` vaut 0 = difficulté non calculée),
+5 propositions par site. DataForSEO sert donc à trois choses : lancer un site neuf, chiffrer une
+candidate (volume + KD affichés sur les CREATE_PAGE, sans appel API), et les backlinks.
+
 ### Module Backlinks (autorité off-page)
 Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
 
