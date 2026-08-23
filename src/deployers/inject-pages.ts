@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { sites, SiteConfig } from '../../config/sites.js';
 import { SeoPageRow } from '../db/supabase.js';
 import * as logger from '../utils/logger.js';
@@ -70,6 +70,10 @@ export async function injectPages(siteKey: string, pages: SeoPageRow[]): Promise
       `Renseigner data_strategy sur /sites, ou le passer en mode CMS.`
     );
   }
+
+  // Les routes du site sont lues une fois par publication : sans elles, un lien
+  // vers une page inexistante s'écrit sans que rien ne proteste.
+  routesReelles = lireRoutesDuSite(site, pages.map((p) => p.slug));
 
   switch (site.dataStrategy) {
     case 'data-files':
@@ -159,9 +163,70 @@ function injectGaragePages(site: SiteConfig, pages: SeoPageRow[]): string[] {
   return injected;
 }
 
+/**
+ * ─── Garde-fou : aucun lien interne vers une page qui n'existe pas ──────────
+ *
+ * Ideo-car a servi pendant des mois 13 URL en 404 (financement-auto,
+ * reprise-vehicule, garantie-vehicule-occasion…) : le contenu généré inventait
+ * des slugs, et l'injection les écrivait sans se demander si la route existait.
+ * Chaque page ville envoyait donc ses visiteurs et son maillage dans le vide.
+ *
+ * Les routes réelles se lisent sur le site lui-même : les dossiers de `app/`
+ * qui contiennent une page, plus les entrées déjà présentes dans les fichiers
+ * de données, plus les pages de la fournée en cours. On distingue une entrée
+ * (`slug: "x"`, clé non quotée écrite par nos gabarits) d'un slug de lien
+ * (`"slug": "x"`, produit par JSON.stringify) — sinon un lien mort déjà écrit
+ * se légitimerait lui-même au passage suivant.
+ */
+let routesReelles: Set<string> | null = null;
+
+export function lireRoutesDuSite(site: SiteConfig, slugsInjectes: string[]): Set<string> {
+  const routes = new Set<string>(slugsInjectes);
+
+  // Routes statiques : un dossier de `app/` qui contient une page en est une.
+  const appDir = `${site.projectPath}/app`;
+  if (existsSync(appDir)) {
+    for (const entry of readdirSync(appDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('[') || entry.name.startsWith('(')) continue;
+      const dir = `${appDir}/${entry.name}`;
+      if (['page.tsx', 'page.ts', 'page.jsx'].some((f) => existsSync(`${dir}/${f}`))) routes.add(entry.name);
+    }
+  }
+
+  // Entrées déjà déployées dans les fichiers de données (clé non quotée).
+  for (const file of fichiersDeDonnees(site)) {
+    if (!existsSync(file)) continue;
+    const contenu = readFileSync(file, 'utf-8');
+    // Nos gabarits écrivent les entrées de deux façons — en tête de ligne
+    // (`    slug: "x"`) ou en ligne après l'accolade (`{ slug: "x", name:`).
+    // Les deux comptent ; `"slug":` (clé quotée, produite par JSON.stringify)
+    // est un slug de lien et ne compte pas.
+    for (const m of contenu.matchAll(/(?:^|[{,])\s*slug:\s*["']([^"']+)["']/gm)) routes.add(m[1]);
+  }
+
+  return routes;
+}
+
+function fichiersDeDonnees(site: SiteConfig): string[] {
+  return [site.serviceDataFile, site.cityDataFile, site.slugPageFile]
+    .filter((f): f is string => Boolean(f))
+    .map((f) => (f.startsWith('/') ? f : `${site.projectPath}/${f}`));
+}
+
+/** Retire les liens dont la cible n'est servie par aucune route. */
+function liensVivants<T extends { slug: string }>(liens: T[], contexte: string): T[] {
+  if (!routesReelles) return liens;
+  const gardes: T[] = [];
+  for (const lien of liens) {
+    if (!lien.slug || routesReelles.has(lien.slug.replace(/^\//, ''))) gardes.push(lien);
+    else logger.warn(`Lien mort écarté (${contexte}) : /${lien.slug} n'est servi par aucune route`);
+  }
+  return gardes;
+}
+
 /** Map internalLinks label→anchor for garage compatibility */
 function mapLinksToAnchors(links: Array<{ slug: string; label?: string; anchor?: string }>): Array<{ slug: string; anchor: string }> {
-  return links.map(l => ({
+  return liensVivants(links, 'internalLinks').map(l => ({
     slug: l.slug,
     anchor: l.anchor || l.label || l.slug,
   }));
@@ -339,7 +404,7 @@ function generateGarageServiceEntry(page: SeoPageRow, c: Record<string, unknown>
 
 function generateGarageCityEntry(page: SeoPageRow, c: Record<string, unknown>): string {
   const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
-  const featuredServices = (c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [];
+  const featuredServices = liensVivants((c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [], 'featuredServices');
   const highlights = (c.highlights as string[]) || [];
   const nearbyPlaces = (c.nearbyPlaces as string[]) || [];
   const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
@@ -458,8 +523,8 @@ function injectVoituresPages(site: SiteConfig, pages: SeoPageRow[]): string[] {
     const nearbyPlaces = (c.nearbyPlaces as string[]) || [];
     const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
     const trustSignals = (c.trustSignals as string[]) || [];
-    const internalLinks = (c.internalLinks as Array<{ slug: string; label: string }>) || [];
-    const featuredServices = (c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [];
+    const internalLinks = liensVivants((c.internalLinks as Array<{ slug: string; label: string }>) || [], 'internalLinks');
+    const featuredServices = liensVivants((c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [], 'featuredServices');
 
     const entry = `
   // ── ${page.city || page.slug} (auto-generated) ──────
