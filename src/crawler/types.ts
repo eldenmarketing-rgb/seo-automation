@@ -1,4 +1,5 @@
 /** Types partagés du crawler B2. */
+import type { RenderedExtract } from './extract.js';
 
 /**
  * Ce qu'on attend de l'URL — la colonne qui empêche le système de traiter une
@@ -30,6 +31,12 @@ export interface CrawlRow {
   structured_data: string[];
   word_count: number | null;
   content_hash: string | null;
+  /**
+   * Le contenu rendu remis dans la forme du CMS — c'est la source du Quality
+   * Score pour toute page que le CMS n'a pas écrite (`external`, ou publiée
+   * mais dont le corps vit dans le code du site).
+   */
+  content_extract: RenderedExtract | null;
   links_out: number | null;
   links_in: number | null;
   click_depth: number | null;

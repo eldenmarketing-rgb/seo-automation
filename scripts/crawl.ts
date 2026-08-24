@@ -164,6 +164,17 @@ async function main() {
         if (insErr) throw new Error(`Écriture ${site.site_key} : ${insErr.message}`);
       }
       console.log(`   ✅ ${rows.length} ligne(s) écrite(s) dans crawl_results`);
+
+      // Rétention de l'extrait rendu : tout le système lit `v_crawl_latest`,
+      // donc seul le dernier passage a besoin de porter son contenu. Les
+      // passages antérieurs gardent leurs faits, pas leur texte.
+      const { error: purgeErr } = await db
+        .from('crawl_results')
+        .update({ content_extract: null })
+        .eq('site_key', site.site_key)
+        .neq('run_id', runId)
+        .not('content_extract', 'is', null);
+      if (purgeErr) console.log(`   ⚠ purge des extraits : ${purgeErr.message}`);
     }
 
     grandTotal += rows.length;

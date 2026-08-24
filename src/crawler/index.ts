@@ -279,6 +279,7 @@ export async function crawlSite(
       structured_data: facts?.structuredData ?? [],
       word_count: facts?.wordCount ?? null,
       content_hash: facts?.contentHash ?? null,
+      content_extract: facts?.rendered ?? null,
       links_out: facts?.internalLinks.length ?? null,
       links_in: null,
       click_depth: null,

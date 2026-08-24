@@ -6,6 +6,7 @@
  */
 import { load } from 'cheerio';
 import { createHash } from 'crypto';
+import { extractRendered, type RenderedExtract } from './extract.js';
 
 export interface PageFacts {
   title: string;
@@ -24,6 +25,11 @@ export interface PageFacts {
   allInternalLinks: string[];
   externalLinks: number;
   noindex: boolean;
+  /**
+   * Le contenu rendu, dans la forme que le Quality Score sait lire. C'est ce
+   * qui permet de noter une page servie par le code du site et non par le CMS.
+   */
+  rendered: RenderedExtract;
 }
 
 /** Types JSON-LD présents, `@graph` compris. */
@@ -119,5 +125,6 @@ export function parsePage(html: string, url: string, xRobotsTag = ''): PageFacts
     allInternalLinks: allInternal,
     externalLinks: external,
     noindex: /\bnoindex\b/.test(robotsSignals),
+    rendered: extractRendered($, origin),
   };
 }
