@@ -214,21 +214,45 @@ function fichiersDeDonnees(site: SiteConfig): string[] {
 }
 
 /** Retire les liens dont la cible n'est servie par aucune route. */
+/**
+ * Le CMS écrit ses liens sous la forme `{ url, anchor }` ; les fichiers de
+ * données des sites les attendent sous la forme `{ slug, anchor }`. Sans cette
+ * normalisation, `slug` vaut `undefined`, `JSON.stringify` supprime la clé, et
+ * le fichier injecté contient des objets réduits à `{ anchor }` — ce qui a
+ * casse le build Vercel du garage sur la page FAP le 2026-08-24.
+ */
+function normaliserLien<T extends { slug?: string; url?: string; anchor?: string; label?: string }>(
+  lien: T
+): T & { slug: string; anchor: string; label: string } {
+  const slug = String(lien.slug || lien.url || '').trim().replace(/^\/+|\/+$/g, '');
+  const texte = lien.anchor || lien.label || slug;
+  return { ...lien, slug, anchor: texte, label: texte };
+}
+
 function liensVivants<T extends { slug: string }>(liens: T[], contexte: string): T[] {
-  if (!routesReelles) return liens;
   const gardes: T[] = [];
   for (const lien of liens) {
-    if (!lien.slug || routesReelles.has(lien.slug.replace(/^\//, ''))) gardes.push(lien);
+    // Un lien sans cible n'est pas « à vérifier plus tard » : il est mort par
+    // construction. L'ancienne version le CONSERVAIT (`!lien.slug ||`), si bien
+    // que le garde-fou était court-circuité exactement dans le cas qu'il devait
+    // attraper — un mauvais nom de champ en amont.
+    if (!lien.slug) {
+      logger.warn(`Lien sans cible écarté (${contexte}) : ${JSON.stringify(lien).slice(0, 120)}`);
+      continue;
+    }
+    if (!routesReelles || routesReelles.has(lien.slug.replace(/^\//, ''))) gardes.push(lien);
     else logger.warn(`Lien mort écarté (${contexte}) : /${lien.slug} n'est servi par aucune route`);
   }
   return gardes;
 }
 
 /** Map internalLinks label→anchor for garage compatibility */
-function mapLinksToAnchors(links: Array<{ slug: string; label?: string; anchor?: string }>): Array<{ slug: string; anchor: string }> {
-  return liensVivants(links, 'internalLinks').map(l => ({
+function mapLinksToAnchors(
+  links: Array<{ slug?: string; url?: string; label?: string; anchor?: string }>
+): Array<{ slug: string; anchor: string }> {
+  return liensVivants(links.map(normaliserLien), 'internalLinks').map((l) => ({
     slug: l.slug,
-    anchor: l.anchor || l.label || l.slug,
+    anchor: l.anchor,
   }));
 }
 
@@ -523,7 +547,10 @@ function injectVoituresPages(site: SiteConfig, pages: SeoPageRow[]): string[] {
     const nearbyPlaces = (c.nearbyPlaces as string[]) || [];
     const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
     const trustSignals = (c.trustSignals as string[]) || [];
-    const internalLinks = liensVivants((c.internalLinks as Array<{ slug: string; label: string }>) || [], 'internalLinks');
+    const internalLinks = liensVivants(
+      ((c.internalLinks as Array<{ slug?: string; url?: string; label?: string; anchor?: string }>) || []).map(normaliserLien),
+      'internalLinks'
+    );
     const featuredServices = liensVivants((c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [], 'featuredServices');
 
     const entry = `
