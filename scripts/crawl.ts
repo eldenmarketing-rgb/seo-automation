@@ -59,16 +59,18 @@ async function main() {
     .order('site_key');
   if (error) throw new Error(`Registre des sites : ${error.message}`);
 
-  const targets = (sites || []).filter(
-    (s: any) => s.domain && (only ? s.site_key === only : s.is_active)
-  );
+  const targets = (sites || []).filter((s: any) => s.domain && (only ? s.site_key === only : s.is_active));
   if (targets.length === 0) {
     console.log(only ? `Aucun site « ${only} » avec un domaine.` : 'Aucun site actif avec un domaine.');
     return;
   }
 
-  console.log(apply ? '\n=== CRAWL (écriture en base) ===' : '\n=== CRAWL — SIMULATION (--apply pour écrire) ===');
-  console.log(`${targets.length} site(s) · inspection GSC ${inspect ? 'activée' : 'désactivée'} · plafond ${maxUrls} URL/site\n`);
+  console.log(
+    apply ? '\n=== CRAWL (écriture en base) ===' : '\n=== CRAWL — SIMULATION (--apply pour écrire) ===',
+  );
+  console.log(
+    `${targets.length} site(s) · inspection GSC ${inspect ? 'activée' : 'désactivée'} · plafond ${maxUrls} URL/site\n`,
+  );
 
   const runId = randomUUID();
   let grandTotal = 0;
@@ -89,13 +91,13 @@ async function main() {
 
     console.log(
       `${pad(site.site_key, 14)} ${result.domain}` +
-        (result.property ? `  ·  ${result.property}` : '  ·  pas de propriété GSC')
+        (result.property ? `  ·  ${result.property}` : '  ·  pas de propriété GSC'),
     );
     console.log(
       `   ${rows.length} URL crawlées en ${Math.round((Date.now() - started) / 1000)} s · ` +
         `${indexables.length} censées être indexées · ${byState('redirected').length} redirigées · ` +
         `${byState('draft').length} brouillon(s) · ${byState('out_of_scope').length} hors périmètre` +
-        (result.sitemapError ? ` · ⚠ ${result.sitemapError}` : '')
+        (result.sitemapError ? ` · ⚠ ${result.sitemapError}` : ''),
     );
 
     // Funnel : uniquement sur les pages censées être indexées. Les redirections
@@ -119,7 +121,9 @@ async function main() {
       for (const row of list.slice(0, 6)) {
         const detail =
           row.gsc_coverage_state ||
-          (row.http_status !== 200 ? `HTTP ${row.http_status}${row.fetchError ? ` (${row.fetchError})` : ''}` : '');
+          (row.http_status !== 200
+            ? `HTTP ${row.http_status}${row.fetchError ? ` (${row.fetchError})` : ''}`
+            : '');
         console.log(`        /${pad(row.slug, 48)} ${detail}`);
       }
       if (list.length > 6) console.log(`        … et ${list.length - 6} autre(s)`);
@@ -158,7 +162,10 @@ async function main() {
         console.log(`   ✅ ${result.alignements.length} statut(s) corrigé(s) dans seo_pages`);
       }
 
-      const payload = rows.map(({ impressions28, fetchError, ...row }) => ({ ...row, run_id: runId }));
+      const payload = rows.map(({ impressions28: _i, fetchError: _f, ...row }) => ({
+        ...row,
+        run_id: runId,
+      }));
       for (let i = 0; i < payload.length; i += 200) {
         const { error: insErr } = await db.from('crawl_results').insert(payload.slice(i, i + 200));
         if (insErr) throw new Error(`Écriture ${site.site_key} : ${insErr.message}`);
@@ -184,7 +191,7 @@ async function main() {
   console.log(
     `${grandTotal} URL ${apply ? 'enregistrées' : 'analysées'}` +
       (apply ? ` · run ${runId}` : ' · relancer avec --apply pour écrire') +
-      '\n'
+      '\n',
   );
 }
 

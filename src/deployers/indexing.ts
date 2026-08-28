@@ -2,13 +2,11 @@ import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
 import crypto from 'crypto';
 import path from 'path';
-import dotenv from 'dotenv';
 import { sites } from '../../config/sites.js';
 import * as logger from '../utils/logger.js';
+import { env } from '../config/env.js';
 
-dotenv.config();
-
-const SERVICE_ACCOUNT_PATH = process.env.GSC_SERVICE_ACCOUNT_PATH || './config/gsc-service-account.json';
+const SERVICE_ACCOUNT_PATH = env.GSC_SERVICE_ACCOUNT_PATH;
 
 // IndexNow key (generated once, reused)
 const INDEXNOW_KEY = crypto.createHash('md5').update('seo-automation-indexnow').digest('hex');
@@ -77,7 +75,10 @@ async function indexNowSubmit(url: string, siteKey: string): Promise<boolean> {
 /**
  * Request instant indexation for a single URL via all available methods.
  */
-export async function requestIndexation(siteKey: string, slug: string): Promise<{
+export async function requestIndexation(
+  siteKey: string,
+  slug: string,
+): Promise<{
   google: boolean;
   indexNow: boolean;
   sitemapPing: boolean;
@@ -100,7 +101,10 @@ export async function requestIndexation(siteKey: string, slug: string): Promise<
 /**
  * Request indexation for multiple URLs at once.
  */
-export async function requestBulkIndexation(siteKey: string, slugs: string[]): Promise<{
+export async function requestBulkIndexation(
+  siteKey: string,
+  slugs: string[],
+): Promise<{
   total: number;
   google: number;
   indexNow: number;
@@ -113,7 +117,7 @@ export async function requestBulkIndexation(siteKey: string, slugs: string[]): P
 
   // IndexNow supports bulk (up to 10000 URLs)
   const host = new URL(site.domain).hostname;
-  const urls = slugs.map(s => `${site.domain}/${s}`);
+  const urls = slugs.map((s) => `${site.domain}/${s}`);
 
   try {
     const res = await fetch('https://api.indexnow.org/indexnow', {
@@ -135,10 +139,11 @@ export async function requestBulkIndexation(siteKey: string, slugs: string[]): P
   }
 
   // Google Indexing API: one by one with rate limiting
-  for (const url of urls.slice(0, 20)) { // Max 20 per day
+  for (const url of urls.slice(0, 20)) {
+    // Max 20 per day
     const ok = await googleIndexUrl(url);
     if (ok) googleCount++;
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   // Ping sitemap once

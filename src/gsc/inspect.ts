@@ -21,13 +21,10 @@
 import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
 import path from 'path';
-import dotenv from 'dotenv';
 import * as logger from '../utils/logger.js';
+import { env } from '../config/env.js';
 
-dotenv.config();
-
-const SERVICE_ACCOUNT_PATH =
-  process.env.GSC_SERVICE_ACCOUNT_PATH || './config/gsc-service-account.json';
+const SERVICE_ACCOUNT_PATH = env.GSC_SERVICE_ACCOUNT_PATH;
 
 /** Délai entre deux inspections (600/min autorisées, on reste très en dessous). */
 const THROTTLE_MS = 150;
@@ -67,7 +64,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function inspectUrl(
   property: string,
   url: string,
-  attempt = 0
+  attempt = 0,
 ): Promise<InspectionResult | null> {
   try {
     const res = await getClient().urlInspection.index.inspect({
@@ -106,7 +103,7 @@ export async function inspectUrl(
 export async function inspectUrls(
   property: string,
   urls: string[],
-  onResult?: (url: string, result: InspectionResult | null) => void
+  onResult?: (url: string, result: InspectionResult | null) => void,
 ): Promise<Map<string, InspectionResult>> {
   const out = new Map<string, InspectionResult>();
 

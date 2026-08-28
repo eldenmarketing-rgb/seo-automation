@@ -148,19 +148,24 @@ Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournis
 
 ## Bot Telegram — Commandes actives
 
-Le bot reste actif pour la gestion des produits et véhicules.
+Le bot sert aux clients pour les véhicules et le catalogue, à l'admin pour quelques actions
+d'exploitation. **Registre unique : `src/bot/commands/index.ts`** (nom, usage, accès) — `/help`
+et `ADMIN_ONLY_COMMANDS` en découlent, rien n'est recopié.
 
 | Commande | Fonction | Accès |
 |----------|----------|-------|
 | /help | Aide contextuelle | Tous |
-| /voiture | Ajout véhicule 12 étapes (photos, data, git commit, deploy) | Tous |
-| /produit | Catalogue restaurant (ajout, prix, dispo, git commit, deploy) | Tous |
+| /voiture | Ajout véhicule 12 étapes (photos, data, commit git, deploy) | Groupes voitures/okaz + admin |
+| /produit | Catalogue restaurant (ajout, prix, dispo, commit git, deploy) | Groupe restaurant + admin |
+| /status, /seo, /index, /monitor, /ping, /deploy, /phone | Exploitation (pages, GSC, indexation, uptime, Vercel, téléphone) | Admin |
 
-Les commandes SEO (/status, /generate, /seo, /keywords, /ctr, /deploy, /index, /ping, /monitor, /edit, /blog, /phone, /claude) existent toujours dans le code mais la gestion SEO se fait via le dashboard.
+Les commandes IA (`/generate`, `/approve`, `/blog`, `/edit`, `/enrichir`, `/ctr`, `/keywords`,
+`/claude`) ont été **supprimées** le 2026-08-28 : elles appelaient l'API Anthropic en autonomie.
+La gestion SEO se fait via le dashboard.
 
 ### Commandes avec écriture fichiers
-- `/voiture` → télécharge photos, écrit `data/cars.ts`, git commit, Vercel deploy
-- `/produit` → écrit `data/catalogue.ts`, git commit, Vercel deploy
+- `/voiture` → télécharge photos, écrit `data/cars.ts`, commit git, Vercel deploy
+- `/produit` → écrit `data/catalogue.ts`, commit git, Vercel deploy
 
 ### Permissions
 - Admin : chat ID `6240980049` — accès total
@@ -172,16 +177,20 @@ Les commandes SEO (/status, /generate, /seo, /keywords, /ctr, /deploy, /index, /
 ## Scripts npm
 
 ```bash
-npm run bot            # Lance le bot Telegram (tsx src/bot/index.ts)
-npm run audit          # Job audit GSC hebdomadaire (tsx src/jobs/weekly-gsc-audit.ts)
-npm run optimize       # Job optimisation mensuelle (tsx src/jobs/monthly-optimize.ts)
-npm run setup-db       # Setup et vérification BDD (tsx scripts/setup-db.ts)
-npm run run            # Point d'entrée principal — status/generate/audit/optimize
+npm run bot            # Bot Telegram (tsx src/bot/index.ts) — pm2 seo-bot en prod
+npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — simulation par défaut, -- --apply écrit
+npm run gsc-sync       # Search Console → gsc_positions (-- --site=vtc, -- --backfill, -- --trigger=…)
+npm run audit          # Audit GSC hebdomadaire (tsx src/jobs/weekly-gsc-audit.ts)
+npm run cluster        # Clustering des mots-clés découverts (tsx src/jobs/weekly-clustering.ts)
+npm run status         # État du système : env, sites actifs, hooks, crons — aucune écriture
+npm run setup-db       # Vérification du schéma Supabase (tsx scripts/setup-db.ts)
 npm run test-telegram  # Test notifications Telegram
-npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — simulation par défaut, --apply écrit
+npm run check          # typecheck + lint + format:check + test + knip — ce que CI et les hooks exigent
 ```
 
-> `npm run generate` (daily-generate) est DÉSACTIVÉ — la génération se fait manuellement via le dashboard (human-in-the-loop).
+> `generate` / `optimize` / `run` n'existent plus : la génération et l'optimisation sont human-in-the-loop
+> via le dashboard. Le filet qualité (ESLint, Prettier, Vitest, knip, husky, CI) est décrit dans
+> `docs/CONTRIBUTING.md` ; le plan et le journal du ménage du 2026-08-28 dans `docs/MAINTENABILITE.md`.
 
 ---
 
@@ -234,14 +243,17 @@ Install : `bash scripts/setup-crons.sh`
 ## Dépendances clés
 
 ```
-@anthropic-ai/sdk    ^0.39.0    Claude API (génération + optimisation)
-grammy               ^1.41.1    Bot Telegram
+@anthropic-ai/sdk     ^0.39.0   Claude API (scripts seulement — les jobs n'appellent plus l'IA)
+grammy                ^1.41.1   Bot Telegram
 @supabase/supabase-js ^2.49.1   Client Supabase
-googleapis           ^146.0.0   Google Search Console + Indexing API
-pg                   ^8.20.0    PostgreSQL direct
-tsx                  ^4.19.0    Exécution TypeScript
-typescript           ^5.7.0     Compilation
+googleapis            ^146.0.0  Search Console + Indexing API (google-auth-library aligné en ^9.15)
+cheerio               ^1.2.0    Parsing HTML du crawler
+tsx                   ^4.19.0   Exécution TypeScript
+typescript            ^5.7.0    Compilation (strict + noUnusedLocals/Parameters)
+eslint 9 · prettier 3 · vitest 3 · knip 5 · husky 9 · lint-staged   Filet qualité (dev)
 ```
+
+> `pg` et `sharp` retirés (aucun usage hors scripts jetables).
 
 ---
 
@@ -282,64 +294,59 @@ VPS         : OVH Ubuntu 24.04
 /config/
   sites.ts                     → chargeur : lit site_profiles (top-level await), expose `sites`
   site-types.ts                → interfaces SiteConfig + ServiceDef
-  sites.legacy.ts              → SNAPSHOT pré-A1, lu seulement par le seed (à supprimer en A2)
   mode-defaults.ts             → **règles génériques LOCAL/THEMATIC/PRODUCT** (seul endroit)
   site-modes.ts                → types et interfaces des modes (local/thématique/produit)
-  site-mode-registry.ts        → chargeur : mode-defaults surchargé par site_profiles
-  site-mode-registry.legacy.ts → SNAPSHOT pré-A1, lu seulement par le seed
   gsc-sites.ts                 → chargeur : dérivé de site_profiles.gsc_domain
   cities-66.ts                 → 42 villes avec zones (perpignan/proche/peripherie/eloigne)
   gsc-service-account.json     → IGNORÉ PAR GIT — ne jamais commiter
-/scripts/
-  run.ts                       → point d'entrée principal (status/generate/audit/optimize)
-  setup-db.ts                  → setup et vérification BDD Supabase
-  setup-crons.sh               → installation des cron jobs
-  run-migration.ts             → migration via Supabase Management API
-  check-pages.ts               → diagnostic DB vs fichiers
-  check-slugs.ts               → matrice restante à générer
+/scripts/                      → 11 outils maintenus ; scripts/oneshot/ = jetable, hors outillage (README)
+  run.ts                       → `npm run status` : env, sites, hooks, crons (aucune écriture)
   crawl.ts                     → crawl + indexation de tous les sites (--site=, --apply, --no-inspect)
   import-inventaire.ts         → import des pages réelles des sites (sitemap → seo_pages en `external`)
-  gsc-auth.ts                  → helper OAuth2 GSC
+  publish-pages.ts             → publication CMS, appelé par le dashboard (lib/publish.ts)
+  serp-analyze.ts              → analyse SERP, appelé par le dashboard (/api/briefs/generate)
+  backfill-intents.ts          → classification d'intention des mots-clés découverts
+  seed-backlinks.ts            → catalogue backlink_targets (idempotent)
+  setup-db.ts · run-migration.ts · check-pages.ts · gsc-auth.ts · setup-crons.sh
+  dev/check-secrets.sh         → refus des secrets au commit (hook pre-commit)
 /src/
-  bot/index.ts                 → point d'entrée bot (Grammy, sessions, auth middleware)
-  bot/permissions.ts           → système permissions admin/groupes
-  bot/commands/*.ts            → commandes bot (voiture, produit, + legacy SEO)
+  config/env.ts                → **seul lecteur de process.env** : SPEC des variables, env / requireEnv / readEnvByName
+  bot/index.ts                 → point d'entrée bot (Grammy, sessions, auth middleware, boucle uptime)
+  bot/commands/index.ts        → **registre des commandes** (nom, usage, accès) — seul endroit à éditer
+  bot/permissions.ts           → admin / groupes clients (TELEGRAM_GROUP_SITES)
   sites/registry.ts            → **chargeur unique du registre** (site_profiles → SiteConfig)
-  db/schema.sql                → schéma complet BDD
-  db/supabase.ts               → client Supabase singleton + CRUD complet
+  db/client.ts                 → getSupabase() ; pages.ts · gsc.ts · logs.ts · optimization.ts par domaine
+  db/supabase.ts               → baril de ré-export (compatibilité des imports)
+  db/schema.sql · migration-*.sql → schéma et migrations (idempotentes)
   deployers/vercel-deploy.ts   → trigger deploy hooks Vercel
   deployers/inject-pages.ts    → injection pages dans fichiers data des sites
   deployers/sitemap-ping.ts    → ping sitemap Google
   deployers/indexing.ts        → Google Indexing API + IndexNow
-  generators/page-generator.ts → génération via Claude API + schema.org
-  generators/universal-prompt.ts   → prompt builder universel (remplace 6 templates)
-  generators/universal-matrix.ts   → matrice universelle (local/thématique/produit)
-  generators/universal-schema.ts   → schema.org adaptatif
   crawler/index.ts             → **crawl d'un site** (base ∪ sitemap ∪ liens) + funnel d'indexation
   crawler/fetch.ts             → requêtes HTTP, chaîne de redirection conservée
-  crawler/parse.ts             → extraction des faits HTML (cheerio)
+  crawler/parse.ts · extract.ts → extraction des faits HTML (cheerio), contenu rendu au format CMS
   crawler/robots.ts            → robots.txt (groupe Googlebot) + sitemaps déclarés
   crawler/graph.ts             → maillage : liens entrants éditoriaux + profondeur de clic
   crawler/issues.ts            → anomalies déterministes selon l'état attendu de l'URL
-  crawler/funnel.ts            → étape atteinte dans le funnel d'indexation
+  crawler/funnel.ts (+ .test)  → étape atteinte dans le funnel d'indexation — testé
   crawler/scope.ts             → slugs hors périmètre SEO (mentions légales, CGV…)
   gsc/auth.ts                  → authentification GSC (service account)
+  gsc/property.ts              → résolution de la propriété (sc-domain: / URL-prefix)
   gsc/inspect.ts               → **API URL Inspection** (scope `webmasters`, pas readonly)
   gsc/client.ts                → client API GSC (queries, pages, positions sur 28j)
-  gsc/analyzer.ts              → analyse des données GSC
-  gsc/ctr-optimizer.ts         → optimisation CTR
-  gsc/indexation.ts            → vérification indexation
-  gsc/optimizer.ts             → optimisation contenu
-  gsc/positions.ts             → suivi positions
+  gsc/analyzer.ts · positions.ts → audit hebdo (candidats d'optimisation)
+  gsc/indexation.ts            → vérification indexation (/index)
+  jobs/gsc-sync.ts             → sync quotidienne GSC (+ --backfill)
   jobs/weekly-gsc-audit.ts     → job hebdo audit GSC
-  jobs/monthly-optimize.ts     → job mensuel optimisation (crée des drafts)
-  keywords/research-v2.ts      → recherche mots-clés (DataForSEO + Google Suggest fallback)
+  jobs/weekly-clustering.ts    → clustering hebdo
   keywords/dataforseo.ts       → client API DataForSEO
-  linking/cocooning.ts         → moteur cocon sémantique (pilier → cluster → feuille)
+  keywords/intent-classifier.ts → classification d'intention (regex + repli IA)
+  dataforseo/cache.ts          → cache des appels payants (dataforseo_cache)
+  serp/competitor-analysis.ts  → analyse SERP concurrentielle
   monitoring/uptime.ts         → vérification uptime sites
   notifications/telegram.ts    → envoi notifications Telegram
-  utils/logger.ts              → logger coloré avec timestamps
-  utils/slug.ts                → génération de slugs
+  utils/logger.ts              → logger horodaté, niveau via LOG_LEVEL (debug/info/warn/error)
+/docs/                         → ARCHITECTURE.md · CONTRIBUTING.md · MAINTENABILITE.md · seo-invariants.md
 .env                           → IGNORÉ PAR GIT — ne jamais commiter
 ```
 

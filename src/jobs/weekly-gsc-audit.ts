@@ -1,6 +1,3 @@
-import dotenv from 'dotenv';
-dotenv.config();
-
 import { discoverProperties } from '../gsc/property.js';
 import { syncPositions } from '../gsc/positions.js';
 import { findOptimizationCandidates, queueCandidates } from '../gsc/analyzer.js';
@@ -47,17 +44,22 @@ export async function weeklyGscAudit() {
         topPage: candidates[0]?.page_url,
       });
 
-      await log('weekly-gsc-audit', `Synced ${rowsSynced} rows, found ${candidates.length} candidates, queued ${queued}`, 'success', siteKey, {
-        rowsSynced,
-        candidatesFound: candidates.length,
-        queued,
-        topCandidates: candidates.slice(0, 5).map(c => ({
-          url: c.page_url,
-          position: c.avg_position,
-          impressions: c.total_impressions,
-        })),
-      });
-
+      await log(
+        'weekly-gsc-audit',
+        `Synced ${rowsSynced} rows, found ${candidates.length} candidates, queued ${queued}`,
+        'success',
+        siteKey,
+        {
+          rowsSynced,
+          candidatesFound: candidates.length,
+          queued,
+          topCandidates: candidates.slice(0, 5).map((c) => ({
+            url: c.page_url,
+            position: c.avg_position,
+            impressions: c.total_impressions,
+          })),
+        },
+      );
     } catch (e) {
       const errMsg = (e as Error).message;
       logger.error(`Audit failed for ${siteKey}: ${errMsg}`);
@@ -97,7 +99,7 @@ if (isDirectRun) {
       logger.success('Weekly GSC audit completed');
       process.exit(0);
     })
-    .catch(e => {
+    .catch((e) => {
       logger.error(`Weekly GSC audit crashed: ${e.message}`);
       notifyError('weekly-gsc-audit', e.message).finally(() => process.exit(1));
     });

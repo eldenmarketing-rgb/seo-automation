@@ -1,0 +1,121 @@
+[
+  {
+    "id": "indexa",
+    "name": "Indexa.fr",
+    "url": "https://www.indexa.fr/register",
+    "tier": "A",
+    "notes": "Annuaire pro français depuis 1997. Inscription gratuite."
+  },
+  {
+    "id": "toplien",
+    "name": "TopLien.fr",
+    "url": "https://www.toplien.fr/submit_site.html",
+    "tier": "A",
+    "notes": "Description doit être unique + en français + sans fautes (66% des refus = description copiée)."
+  },
+  {
+    "id": "webwiki",
+    "name": "Webwiki.fr",
+    "url": "https://www.webwiki.fr/info/inscription-de-site-internet.html",
+    "tier": "A",
+    "notes": "Auto-submit, parfois CAPTCHA. Saisir URL puis description."
+  },
+  {
+    "id": "annuairefrancais",
+    "name": "Annuaire Français",
+    "url": "https://www.annuairefrancais.fr/proposer-un-site/",
+    "tier": "A",
+    "notes": "Choisir catégorie Transport > Taxi."
+  },
+  {
+    "id": "yably",
+    "name": "Yably.fr",
+    "url": "https://yably.fr/",
+    "tier": "A",
+    "notes": "Cliquer 'Ajouter mon entreprise' en haut."
+  },
+  {
+    "id": "yoys",
+    "name": "Yoys.fr",
+    "url": "https://yoys.fr/add-listing",
+    "tier": "A",
+    "notes": "Auto-submit, gratuit."
+  },
+  {
+    "id": "hoodspot",
+    "name": "Hoodspot.fr",
+    "url": "https://www.hoodspot.fr/",
+    "tier": "A",
+    "notes": "Chercher entreprise existante puis revendiquer, ou ajouter via lien footer."
+  },
+  {
+    "id": "justacote",
+    "name": "JustAcote.com",
+    "url": "https://www.justacote.com/inscription-entreprise",
+    "tier": "A",
+    "notes": "Inscription gratuite, profil pro."
+  },
+  {
+    "id": "118000",
+    "name": "118000.fr",
+    "url": "https://www.118000.fr/inscription-entreprise",
+    "tier": "A",
+    "notes": "Annuaire pro France, gratuit."
+  },
+  {
+    "id": "pagespro",
+    "name": "Pages Pro",
+    "url": "https://www.pagespro.com/inscription",
+    "tier": "A",
+    "notes": "Listing gratuit."
+  },
+  {
+    "id": "gowork",
+    "name": "GoWork.fr",
+    "url": "https://www.gowork.fr/ajouter-entreprise",
+    "tier": "A",
+    "notes": "Profil entreprise + avis."
+  },
+  {
+    "id": "horairesouverture",
+    "name": "Horaires Ouverture 24",
+    "url": "https://horaires-douverture24.fr/ajouter-entreprise",
+    "tier": "A",
+    "notes": "Profil pro gratuit."
+  },
+  {
+    "id": "annuaire-mairie",
+    "name": "Annuaire Mairie",
+    "url": "https://www.annuaire-mairie.fr/perpignan.html",
+    "tier": "A",
+    "notes": "Aller dans la fiche Perpignan, section entreprises. Soumission via formulaire 'Ajouter une entreprise'."
+  },
+  {
+    "id": "annuaire-annuaire",
+    "name": "Annuaire-Annuaire.com",
+    "url": "https://www.annuaire-annuaire.com/proposer-site/",
+    "tier": "B",
+    "notes": "Annuaire généraliste FR. Skip si 404."
+  },
+  {
+    "id": "tripadvisor",
+    "name": "TripAdvisor for Owners",
+    "url": "https://www.tripadvisor.com/Owners",
+    "tier": "S",
+    "notes": "Catégorie 'Transports' > Taxi & Navette > Perpignan. Compte requis (créer)."
+  },
+  {
+    "id": "yelp",
+    "name": "Yelp Business France",
+    "url": "https://biz.yelp.fr/signup",
+    "tier": "S",
+    "notes": "Profil entreprise gratuit. Bénéficie aussi du redirect cityvox.fr."
+  },
+  {
+    "id": "foursquare",
+    "name": "Foursquare for Business",
+    "url": "https://business.foursquare.com/products/listings/",
+    "tier": "S",
+    "notes": "Listing gratuit. Alimente Apple Maps + Bing Places en partie."
+  }
+]

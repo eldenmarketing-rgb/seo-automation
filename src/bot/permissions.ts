@@ -1,3 +1,4 @@
+import { env } from '../config/env.js';
 /**
  * Group-based permissions system.
  *
@@ -10,12 +11,12 @@
  * A group chat can only run commands associated with its site.
  */
 
-const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+const ADMIN_CHAT_ID = env.TELEGRAM_CHAT_ID ?? '';
 
 // Parse TELEGRAM_GROUP_SITES env var
 function parseGroupSites(): Map<string, string> {
   const map = new Map<string, string>();
-  const raw = process.env.TELEGRAM_GROUP_SITES || '';
+  const raw = env.TELEGRAM_GROUP_SITES ?? '';
   if (!raw) return map;
 
   for (const entry of raw.split(',')) {

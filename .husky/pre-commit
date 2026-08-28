@@ -1,0 +1,3 @@
+set -e
+scripts/dev/check-secrets.sh
+npx lint-staged

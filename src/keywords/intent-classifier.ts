@@ -12,12 +12,9 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import dotenv from 'dotenv';
 import type { PageIntent } from '../../config/site-modes.js';
 import { getSupabase } from '../db/supabase.js';
 import * as logger from '../utils/logger.js';
-
-dotenv.config();
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -29,7 +26,10 @@ const INTENT_PATTERNS: Array<{ pattern: RegExp; intent: SearchIntent }> = [
   { pattern: /urgent|nuit|24h|dimanche|samedi|d[ée]pannage|sos|ouvert/i, intent: 'transactional' },
   { pattern: /prix|tarif|co[uû]t|devis|combien|pas cher|gratuit/i, intent: 'commercial' },
   { pattern: /avis|meilleur|comparatif|vs\b|quel\b|recommand|top\b/i, intent: 'commercial' },
-  { pattern: /comment|quand|pourquoi|est-ce|diff[ée]rence|sympt[oô]me|guide|tuto|c.?est quoi|faut-il/i, intent: 'informational' },
+  {
+    pattern: /comment|quand|pourquoi|est-ce|diff[ée]rence|sympt[oô]me|guide|tuto|c.?est quoi|faut-il/i,
+    intent: 'informational',
+  },
   { pattern: /pr[eè]s|proche|horaire|adresse|itin[ée]raire|quartier|zone/i, intent: 'local' },
 ];
 
@@ -74,7 +74,8 @@ export async function classifyIntentsBatch(
     return null;
   };
 
-  let fromDfs = 0, fromRegex = 0;
+  let fromDfs = 0,
+    fromRegex = 0;
 
   for (const kw of keywords) {
     // Step 1: DataForSEO intent (most reliable — based on real Google data)
@@ -99,7 +100,9 @@ export async function classifyIntentsBatch(
 
   // Step 3: Claude fallback for ambiguous keywords (batches of 50)
   if (needsClaude.length > 0) {
-    logger.info(`Intent classifier: ${fromDfs} DataForSEO, ${fromRegex} regex, ${needsClaude.length} need Claude`);
+    logger.info(
+      `Intent classifier: ${fromDfs} DataForSEO, ${fromRegex} regex, ${needsClaude.length} need Claude`,
+    );
 
     const BATCH_SIZE = 50;
     for (let i = 0; i < needsClaude.length; i += BATCH_SIZE) {
@@ -132,7 +135,7 @@ Catégories possibles : transactional, commercial, informational, local
 Réponds UNIQUEMENT en JSON, format : {"keyword": "intent", ...}
 
 Mots-clés :
-${keywords.map(k => `- ${k}`).join('\n')}`;
+${keywords.map((k) => `- ${k}`).join('\n')}`;
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -141,12 +144,15 @@ ${keywords.map(k => `- ${k}`).join('\n')}`;
   });
 
   const text = response.content
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
     .join('');
 
   try {
-    const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const cleaned = text
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .trim();
     const startIdx = cleaned.indexOf('{');
     const endIdx = cleaned.lastIndexOf('}');
     if (startIdx === -1 || endIdx === -1) throw new Error('No JSON');
@@ -155,8 +161,8 @@ ${keywords.map(k => `- ${k}`).join('\n')}`;
     const validIntents = new Set<string>(['transactional', 'commercial', 'informational', 'local']);
 
     for (const [kw, intent] of Object.entries(parsed)) {
-      const matched = keywords.find(k => k.toLowerCase() === kw.toLowerCase()) || kw;
-      result.set(matched, validIntents.has(intent) ? intent as SearchIntent : 'transactional');
+      const matched = keywords.find((k) => k.toLowerCase() === kw.toLowerCase()) || kw;
+      result.set(matched, validIntents.has(intent) ? (intent as SearchIntent) : 'transactional');
     }
   } catch (e) {
     logger.warn(`Failed to parse Claude intent response: ${(e as Error).message}`);
@@ -217,7 +223,9 @@ export async function backfillIntents(siteKey?: string): Promise<number> {
   if (error) {
     // Column might not exist yet
     if (error.message.includes('intent_type')) {
-      logger.error('Column intent_type does not exist. Run migration first: src/db/migration-intent-type.sql');
+      logger.error(
+        'Column intent_type does not exist. Run migration first: src/db/migration-intent-type.sql',
+      );
       return -1;
     }
     throw new Error(`backfillIntents query: ${error.message}`);
@@ -234,7 +242,7 @@ export async function backfillIntents(siteKey?: string): Promise<number> {
   const dataforseoIntents = new Map<string, string>();
   try {
     const { getSearchVolume } = await import('./dataforseo.js');
-    const kwList = data.map(r => r.keyword);
+    const kwList = data.map((r) => r.keyword);
     // Only call DFS for batches — it returns intent from search_intent_info
     const volumeData = await getSearchVolume(kwList);
     for (const [kw, kwData] of volumeData) {
@@ -246,12 +254,12 @@ export async function backfillIntents(siteKey?: string): Promise<number> {
   }
 
   // Classify all keywords (DFS → regex → Claude)
-  const keywords = data.map(r => r.keyword);
+  const keywords = data.map((r) => r.keyword);
   const intents = await classifyIntentsBatch(keywords, dataforseoIntents);
 
   // Update in batches of 500
   const BATCH_SIZE = 500;
-  const rows = data.map(r => ({
+  const rows = data.map((r) => ({
     id: r.id,
     intent_type: intents.get(r.keyword) || 'transactional',
   }));
@@ -288,9 +296,9 @@ export function getIntentPromptModifier(intent: SearchIntent): string {
     case 'transactional':
       return [
         '═══ INTENTION TRANSACTIONNELLE ═══',
-        'L\'utilisateur est PRÊT À AGIR. Adapte le contenu en conséquence :',
+        "L'utilisateur est PRÊT À AGIR. Adapte le contenu en conséquence :",
         '- CTA fort et visible (numéro de téléphone click-to-call)',
-        '- Trust signals : années d\'expérience, nombre de clients, certifications',
+        "- Trust signals : années d'expérience, nombre de clients, certifications",
         '- Sections courtes et orientées action',
         '- Avantages concrets (délai, garantie, proximité)',
         '- Urgence : disponibilité immédiate, intervention rapide',
@@ -299,7 +307,7 @@ export function getIntentPromptModifier(intent: SearchIntent): string {
     case 'commercial':
       return [
         '═══ INTENTION COMMERCIALE ═══',
-        'L\'utilisateur COMPARE les options. Adapte le contenu :',
+        "L'utilisateur COMPARE les options. Adapte le contenu :",
         '- Tableau comparatif ou grille tarifaire si pertinent',
         '- Critères de choix clairement expliqués',
         '- FAQ détaillée (8+ questions) sur les prix, délais, garanties',
@@ -310,7 +318,7 @@ export function getIntentPromptModifier(intent: SearchIntent): string {
     case 'informational':
       return [
         '═══ INTENTION INFORMATIONNELLE ═══',
-        'L\'utilisateur CHERCHE À COMPRENDRE. Adapte le contenu :',
+        "L'utilisateur CHERCHE À COMPRENDRE. Adapte le contenu :",
         '- Guide long et structuré (1500+ mots)',
         '- FAQ riche (8+ questions, 80-120 mots par réponse)',
         '- Explications pédagogiques avec exemples concrets',
@@ -322,9 +330,9 @@ export function getIntentPromptModifier(intent: SearchIntent): string {
     case 'local':
       return [
         '═══ INTENTION LOCALE ═══',
-        'L\'utilisateur cherche un SERVICE LOCAL. Adapte le contenu :',
+        "L'utilisateur cherche un SERVICE LOCAL. Adapte le contenu :",
         '- NAP (Nom, Adresse, Téléphone) visible et cohérent',
-        '- Horaires d\'ouverture',
+        "- Horaires d'ouverture",
         '- Itinéraire / accès / parking',
         '- Mentions des quartiers et zones desservies',
         '- Avis locaux et ancrage territorial',

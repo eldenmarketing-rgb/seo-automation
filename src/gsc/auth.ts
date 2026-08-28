@@ -1,11 +1,9 @@
 import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
 import path from 'path';
-import dotenv from 'dotenv';
+import { env } from '../config/env.js';
 
-dotenv.config();
-
-const SERVICE_ACCOUNT_PATH = process.env.GSC_SERVICE_ACCOUNT_PATH || './config/gsc-service-account.json';
+const SERVICE_ACCOUNT_PATH = env.GSC_SERVICE_ACCOUNT_PATH;
 
 let searchConsoleClient: ReturnType<typeof google.searchconsole> | null = null;
 

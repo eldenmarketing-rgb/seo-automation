@@ -11,9 +11,6 @@
  * in buildKeywordsContext) — they just won't be in a cluster yet.
  */
 
-import dotenv from 'dotenv';
-dotenv.config();
-
 import { getSupabase, log } from '../db/supabase.js';
 import { sites } from '../../config/sites.js';
 import { notifyError } from '../notifications/telegram.js';
@@ -22,10 +19,44 @@ import * as logger from '../utils/logger.js';
 // ─── Config ─────────────────────────────────────────────────
 
 const STOP_WORDS = new Set([
-  'le', 'la', 'de', 'à', 'un', 'des', 'les', 'pour', 'par', 'dans',
-  'sur', 'avec', 'en', 'du', 'au', 'une', 'et', 'ou', 'qui', 'que',
-  'est', 'son', 'sa', 'ses', 'ce', 'cette', 'ces', 'a', 'l', 'd',
-  'the', 'of', 'and', 'to', 'in', 'on', 'it', 'is',
+  'le',
+  'la',
+  'de',
+  'à',
+  'un',
+  'des',
+  'les',
+  'pour',
+  'par',
+  'dans',
+  'sur',
+  'avec',
+  'en',
+  'du',
+  'au',
+  'une',
+  'et',
+  'ou',
+  'qui',
+  'que',
+  'est',
+  'son',
+  'sa',
+  'ses',
+  'ce',
+  'cette',
+  'ces',
+  'a',
+  'l',
+  'd',
+  'the',
+  'of',
+  'and',
+  'to',
+  'in',
+  'on',
+  'it',
+  'is',
 ]);
 
 const SIMILARITY_THRESHOLD = 0.6;
@@ -36,9 +67,10 @@ const UPSERT_CHUNK = 200;
 function tokenize(keyword: string): string[] {
   return keyword
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .split(/[\s\-_'']+/)
-    .filter(t => t.length > 1 && !STOP_WORDS.has(t));
+    .filter((t) => t.length > 1 && !STOP_WORDS.has(t));
 }
 
 function tokenSimilarity(a: string[], b: string[]): number {
@@ -184,7 +216,7 @@ async function storeClusters(siteKey: string, clusters: Cluster[]): Promise<numb
   // (full recalculation is cleaner than partial merge)
   await db.from('keyword_clusters').delete().eq('site_key', siteKey);
 
-  const rows = clusters.map(c => {
+  const rows = clusters.map((c) => {
     // Compute dominant intent by majority vote
     let dominantIntent = 'transactional';
     let maxCount = 0;
@@ -210,9 +242,7 @@ async function storeClusters(siteKey: string, clusters: Cluster[]): Promise<numb
   let stored = 0;
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
     const chunk = rows.slice(i, i + UPSERT_CHUNK);
-    const { error } = await db
-      .from('keyword_clusters')
-      .insert(chunk);
+    const { error } = await db.from('keyword_clusters').insert(chunk);
     if (error) {
       logger.error(`  Upsert chunk failed: ${error.message}`);
     } else {
@@ -232,16 +262,16 @@ export async function weeklyClustering(forceAll = false) {
   // 1. Detect which sites need reclustering
   const statuses = await getSitesNeedingUpdate();
 
-  const sitesToProcess = forceAll
-    ? statuses
-    : statuses.filter(s => s.needsUpdate);
+  const sitesToProcess = forceAll ? statuses : statuses.filter((s) => s.needsUpdate);
 
   logger.info(`Sites with keywords: ${statuses.length}`);
   logger.info(`Sites needing update: ${sitesToProcess.length}${forceAll ? ' (forced all)' : ''}`);
 
   for (const s of statuses) {
     const marker = s.needsUpdate ? '  -> NEEDS UPDATE' : '  (up to date)';
-    logger.info(`  ${s.siteKey}: kw=${s.lastKeywordAt.slice(0, 19)} cluster=${s.lastClusterAt?.slice(0, 19) || 'none'}${marker}`);
+    logger.info(
+      `  ${s.siteKey}: kw=${s.lastKeywordAt.slice(0, 19)} cluster=${s.lastClusterAt?.slice(0, 19) || 'none'}${marker}`,
+    );
   }
 
   if (sitesToProcess.length === 0) {
@@ -312,11 +342,18 @@ export async function weeklyClustering(forceAll = false) {
     logger.info(`  ${site}: ${r.keywords} kw -> ${r.clusters} clusters`);
   }
 
-  await log('weekly-clustering', `${sitesToProcess.length} sites, ${totalClusters} clusters`, 'success', undefined, {
-    sitesProcessed: sitesToProcess.length,
-    totalClusters,
-    sites: siteResults,
-  }, duration);
+  await log(
+    'weekly-clustering',
+    `${sitesToProcess.length} sites, ${totalClusters} clusters`,
+    'success',
+    undefined,
+    {
+      sitesProcessed: sitesToProcess.length,
+      totalClusters,
+      sites: siteResults,
+    },
+    duration,
+  );
 
   return { sitesProcessed: sitesToProcess.length, totalClusters, duration };
 }
@@ -327,11 +364,11 @@ const isDirectRun = process.argv[1]?.includes('weekly-clustering');
 if (isDirectRun) {
   const forceAll = process.argv.includes('--force');
   weeklyClustering(forceAll)
-    .then(r => {
+    .then((r) => {
       logger.success(`Weekly clustering done: ${r.totalClusters} clusters across ${r.sitesProcessed} sites`);
       process.exit(0);
     })
-    .catch(e => {
+    .catch((e) => {
       logger.error(`Weekly clustering crashed: ${e.message}`);
       notifyError('weekly-clustering', e.message).finally(() => process.exit(1));
     });

@@ -1,7 +1,7 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot } from 'grammy';
 import type { BotContext } from '../index.js';
 import { sites } from '../../../config/sites.js';
-import { requestIndexation, requestBulkIndexation, getIndexNowKey } from '../../deployers/indexing.js';
+import { requestIndexation, requestBulkIndexation } from '../../deployers/indexing.js';
 import { getExistingSlugsFromFiles } from '../../deployers/inject-pages.js';
 import { getExistingSlugs } from '../../db/supabase.js';
 
@@ -14,13 +14,13 @@ export function registerPingCommand(bot: Bot<BotContext>) {
     if (args.length < 2) {
       await ctx.reply(
         `<b>Indexation instantanée</b>\n\n` +
-        `<b>Usage :</b>\n` +
-        `/ping [site] [slug] — Indexer une page\n` +
-        `/ping [site] all — Indexer toutes les pages\n\n` +
-        `<b>Exemple :</b>\n` +
-        `/ping garage vidange-perpignan\n` +
-        `/ping vtc all`,
-        { parse_mode: 'HTML' }
+          `<b>Usage :</b>\n` +
+          `/ping [site] [slug] — Indexer une page\n` +
+          `/ping [site] all — Indexer toutes les pages\n\n` +
+          `<b>Exemple :</b>\n` +
+          `/ping garage vidange-perpignan\n` +
+          `/ping vtc all`,
+        { parse_mode: 'HTML' },
       );
       return;
     }
@@ -74,8 +74,8 @@ async function pingAll(ctx: BotContext, siteKey: string) {
 
   await ctx.reply(
     `🔔 Indexation de <b>${allSlugs.length} pages</b> pour ${site.name}...\n` +
-    `<i>Google: max 20/jour | IndexNow: toutes</i>`,
-    { parse_mode: 'HTML' }
+      `<i>Google: max 20/jour | IndexNow: toutes</i>`,
+    { parse_mode: 'HTML' },
   );
 
   try {

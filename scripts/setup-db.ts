@@ -1,8 +1,5 @@
 import { readFileSync } from 'fs';
 import { getSupabase } from '../src/db/supabase.js';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 async function setupDatabase() {
   console.log('🔧 Setting up Supabase database...\n');
@@ -19,7 +16,7 @@ async function setupDatabase() {
   // Test connection
   try {
     const db = getSupabase();
-    const { data, error } = await db.from('seo_pages').select('count').limit(1);
+    const { error } = await db.from('seo_pages').select('count').limit(1);
     if (error && error.code === '42P01') {
       console.log('❌ Tables not yet created. Please run the SQL in Supabase first.');
     } else if (error) {

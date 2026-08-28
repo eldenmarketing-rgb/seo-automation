@@ -15,14 +15,13 @@
  *
  * --dry-run : injecte et montre le diff, sans commit/push/deploy.
  */
-import dotenv from 'dotenv';
-dotenv.config();
 
 import { execFileSync } from 'child_process';
 import { getSupabase } from '../src/db/supabase.js';
 import { sites } from '../config/sites.js';
 import { injectPages } from '../src/deployers/inject-pages.js';
 import type { SeoPageRow } from '../src/db/supabase.js';
+import { readEnvByName } from '../src/config/env.js';
 
 interface SiteResult {
   site_key: string;
@@ -62,11 +61,9 @@ async function run() {
 
   // A3 : la branche sur laquelle chaque site doit être publié. Sans ça, le push
   // partait sur la branche courante du dépôt, quelle qu'elle soit.
-  const { data: profiles } = await db
-    .from('site_profiles')
-    .select('site_key, production_branch');
+  const { data: profiles } = await db.from('site_profiles').select('site_key, production_branch');
   const prodBranch = new Map<string, string>(
-    (profiles || []).map((p) => [p.site_key as string, (p.production_branch as string) || 'main'])
+    (profiles || []).map((p) => [p.site_key as string, (p.production_branch as string) || 'main']),
   );
 
   const bySite = new Map<string, SeoPageRow[]>();
@@ -189,7 +186,7 @@ async function run() {
     // ── 3. Deploy Vercel ────────────────────────────────────────
     // Le push suffit quand Vercel est branché sur GitHub ; le hook force
     // le build pour les sites qui n'ont pas l'intégration Git.
-    const hookUrl = process.env[site.vercelHookEnv];
+    const hookUrl = readEnvByName(site.vercelHookEnv);
     if (hookUrl) {
       try {
         const res = await fetch(hookUrl, { method: 'POST' });

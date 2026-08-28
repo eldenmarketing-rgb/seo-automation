@@ -55,9 +55,8 @@ async function inParallel<T, R>(items: T[], limit: number, task: (item: T) => Pr
 }
 
 /** Fichiers qui ne sont pas des pages. */
-const NOT_A_PAGE = /\.(jpg|jpeg|png|gif|webp|avif|svg|ico|css|js|mjs|json|xml|txt|pdf|zip|mp4|webm|woff2?|ttf)$/i;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const NOT_A_PAGE =
+  /\.(jpg|jpeg|png|gif|webp|avif|svg|ico|css|js|mjs|json|xml|txt|pdf|zip|mp4|webm|woff2?|ttf)$/i;
 
 function slugOf(url: string, origin: string): string {
   try {
@@ -81,7 +80,10 @@ function locsOf(xml: string): string[] {
 }
 
 /** URL déclarées au sitemap (index de sitemaps compris, un niveau). */
-async function sitemapUrls(origin: string, declared: string[]): Promise<{ urls: Set<string>; error?: string }> {
+async function sitemapUrls(
+  origin: string,
+  declared: string[],
+): Promise<{ urls: Set<string>; error?: string }> {
   const candidates = [...new Set([...declared, `${origin}/sitemap.xml`])];
   const urls = new Set<string>();
   let reached = false;
@@ -140,7 +142,7 @@ export interface Alignement {
 function statutProuve(
   row: CrawlRow,
   statutBase: string,
-  siteEnCms: boolean
+  siteEnCms: boolean,
 ): { statut: string; preuve: string } | null {
   if (row.expected_state === 'out_of_scope') return null;
 
@@ -159,7 +161,10 @@ function statutProuve(
   if (['published', 'optimized', 'external'].includes(statutBase)) {
     if (row.redirect_chain.length > 0 && row.http_status === 200) {
       const cible = row.final_url || '?';
-      return { statut: 'redirected', preuve: `redirige (${row.redirect_chain.map((c) => c.status).join(' → ')}) vers ${cible}, qui répond 200` };
+      return {
+        statut: 'redirected',
+        preuve: `redirige (${row.redirect_chain.map((c) => c.status).join(' → ')}) vers ${cible}, qui répond 200`,
+      };
     }
     return null;
   }
@@ -169,7 +174,7 @@ function statutProuve(
 
 export async function crawlSite(
   site: { site_key: string; domain: string },
-  opts: CrawlOptions = {}
+  opts: CrawlOptions = {},
 ): Promise<SiteCrawlResult> {
   const { inspect = true, maxUrls = 400, concurrency = 5, onProgress } = opts;
   const db = getSupabase();
@@ -234,71 +239,71 @@ export async function crawlSite(
     const wave = queue.splice(0, Math.min(concurrency, maxUrls - crawled.length));
 
     const results = await inParallel(wave, concurrency, async (url) => {
-    const key = normalizeUrl(url);
-    const dbPage = dbByKey.get(key);
-    const slug = slugOf(url, origin);
-    let expected = expectedStateFor(slug, dbPage?.status);
+      const key = normalizeUrl(url);
+      const dbPage = dbByKey.get(key);
+      const slug = slugOf(url, origin);
+      let expected = expectedStateFor(slug, dbPage?.status);
 
-    const res = await fetchUrl(url);
+      const res = await fetchUrl(url);
 
-    // Une URL que la base ne connaît pas, absente du sitemap, et qui redirige :
-    // c'est une ancienne adresse encore liée quelque part, pas une page qu'on
-    // attend dans l'index. La signaler comme « devrait répondre 200 » serait
-    // faux — son état normal EST la redirection.
-    if (!dbPage && expected === 'indexable' && res.chain.length > 0 && !sitemapKeys.has(key)) {
-      expected = 'redirected';
-    }
-    const facts =
-      res.status === 200 && res.html
-        ? parsePage(res.html, res.finalUrl, res.headers['x-robots-tag'] || '')
-        : null;
+      // Une URL que la base ne connaît pas, absente du sitemap, et qui redirige :
+      // c'est une ancienne adresse encore liée quelque part, pas une page qu'on
+      // attend dans l'index. La signaler comme « devrait répondre 200 » serait
+      // faux — son état normal EST la redirection.
+      if (!dbPage && expected === 'indexable' && res.chain.length > 0 && !sitemapKeys.has(key)) {
+        expected = 'redirected';
+      }
+      const facts =
+        res.status === 200 && res.html
+          ? parsePage(res.html, res.finalUrl, res.headers['x-robots-tag'] || '')
+          : null;
 
-    const robotsAllowed = isAllowed(robots, new URL(url).pathname);
+      const robotsAllowed = isAllowed(robots, new URL(url).pathname);
 
-    const row: CrawlRow = {
-      site_key: site.site_key,
-      page_id: dbPage?.id ?? null,
-      url,
-      slug,
-      expected_state: expected,
+      const row: CrawlRow = {
+        site_key: site.site_key,
+        page_id: dbPage?.id ?? null,
+        url,
+        slug,
+        expected_state: expected,
 
-      http_status: res.status,
-      final_url: res.finalUrl,
-      redirect_chain: res.chain,
-      response_ms: res.ms,
+        http_status: res.status,
+        final_url: res.finalUrl,
+        redirect_chain: res.chain,
+        response_ms: res.ms,
 
-      indexable: facts ? !facts.noindex && robotsAllowed && res.status === 200 : false,
-      robots_txt_allowed: robotsAllowed,
-      meta_robots: facts?.metaRobots || null,
-      canonical: facts?.canonical || null,
-      title: facts?.title || null,
-      meta_description: facts?.metaDescription || null,
-      h1: facts?.h1 || null,
-      h1_count: facts?.h1Count ?? null,
-      h2_count: facts?.h2Count ?? null,
-      structured_data: facts?.structuredData ?? [],
-      word_count: facts?.wordCount ?? null,
-      content_hash: facts?.contentHash ?? null,
-      content_extract: facts?.rendered ?? null,
-      links_out: facts?.internalLinks.length ?? null,
-      links_in: null,
-      click_depth: null,
-      in_sitemap: sitemapKeys.has(key),
+        indexable: facts ? !facts.noindex && robotsAllowed && res.status === 200 : false,
+        robots_txt_allowed: robotsAllowed,
+        meta_robots: facts?.metaRobots || null,
+        canonical: facts?.canonical || null,
+        title: facts?.title || null,
+        meta_description: facts?.metaDescription || null,
+        h1: facts?.h1 || null,
+        h1_count: facts?.h1Count ?? null,
+        h2_count: facts?.h2Count ?? null,
+        structured_data: facts?.structuredData ?? [],
+        word_count: facts?.wordCount ?? null,
+        content_hash: facts?.contentHash ?? null,
+        content_extract: facts?.rendered ?? null,
+        links_out: facts?.internalLinks.length ?? null,
+        links_in: null,
+        click_depth: null,
+        in_sitemap: sitemapKeys.has(key),
 
-      gsc_verdict: null,
-      gsc_coverage_state: null,
-      gsc_indexing_state: null,
-      gsc_page_fetch_state: null,
-      gsc_robots_state: null,
-      gsc_google_canonical: null,
-      gsc_last_crawl: null,
-      gsc_inspected_at: null,
+        gsc_verdict: null,
+        gsc_coverage_state: null,
+        gsc_indexing_state: null,
+        gsc_page_fetch_state: null,
+        gsc_robots_state: null,
+        gsc_google_canonical: null,
+        gsc_last_crawl: null,
+        gsc_inspected_at: null,
 
-      funnel_stage: '',
-      issues: [],
-      impressions28: 0,
-      fetchError: res.error,
-    };
+        funnel_stage: '',
+        issues: [],
+        impressions28: 0,
+        fetchError: res.error,
+      };
 
       return {
         url,
@@ -324,7 +329,7 @@ export async function crawlSite(
   // ─── Maillage ────────────────────────────────────────────────────────────
   const graph = buildGraph(
     crawled.map((c) => ({ url: c.url, contextual: c.contextual, all: c.all })),
-    home
+    home,
   );
   for (const c of crawled) {
     const key = normalizeUrl(c.url);
@@ -358,7 +363,7 @@ export async function crawlSite(
   if (property) {
     // Les pages hors périmètre et les brouillons ne consomment pas de quota.
     const toInspect = crawled.filter(
-      (c) => c.row.expected_state === 'indexable' || c.row.expected_state === 'redirected'
+      (c) => c.row.expected_state === 'indexable' || c.row.expected_state === 'redirected',
     );
 
     await inParallel(toInspect, concurrency, async (c) => {
@@ -393,7 +398,13 @@ export async function crawlSite(
     const prouve = statutProuve(c.row, dbPage.status, siteEnCms);
     if (!prouve || prouve.statut === dbPage.status) continue;
 
-    alignements.push({ page_id: dbPage.id, url: c.url, de: dbPage.status, vers: prouve.statut, preuve: prouve.preuve });
+    alignements.push({
+      page_id: dbPage.id,
+      url: c.url,
+      de: dbPage.status,
+      vers: prouve.statut,
+      preuve: prouve.preuve,
+    });
     c.row.expected_state = prouve.statut === 'redirected' ? 'redirected' : 'indexable';
   }
 

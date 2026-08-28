@@ -5,12 +5,9 @@
  */
 
 // Redirect console.log to stderr so stdout stays clean JSON
-const origLog = console.log;
 console.log = (...args: unknown[]) => console.error(...args);
 
 import { analyzeSerpForPrompt, quickSerpTerms } from '../src/serp/competitor-analysis.js';
-import dotenv from 'dotenv';
-dotenv.config();
 
 const query = process.argv[2];
 if (!query) {

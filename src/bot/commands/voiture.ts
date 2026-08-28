@@ -4,11 +4,12 @@ import { sites, SiteConfig } from '../../../config/sites.js';
 import { triggerDeploy } from '../../deployers/vercel-deploy.js';
 import * as logger from '../../utils/logger.js';
 import { canAccessSite, getSiteForChat, isAdmin } from '../permissions.js';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, createWriteStream, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, createWriteStream, unlinkSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import https from 'https';
 import http from 'http';
+import { env } from '../../config/env.js';
 
 /**
  * Sites concessionnaires pilotés par /voiture — un client par site key.
@@ -63,13 +64,13 @@ async function requireSite(ctx: BotContext): Promise<SiteConfig | undefined> {
         reply_markup: buildSiteKeyboard(),
       });
     } else {
-      await ctx.reply('⛔ Vous n\'avez pas accès à cette commande.');
+      await ctx.reply("⛔ Vous n'avez pas accès à cette commande.");
     }
     return undefined;
   }
 
   if (!canAccessSite(chatId, site.key)) {
-    await ctx.reply('⛔ Vous n\'avez pas accès à ce site.');
+    await ctx.reply("⛔ Vous n'avez pas accès à ce site.");
     return undefined;
   }
 
@@ -93,7 +94,22 @@ interface CarDraft {
   categories?: string[];
 }
 
-type VoitureStep = 'marque' | 'modele' | 'annee' | 'prix' | 'km' | 'carburant' | 'boite' | 'couleur' | 'chevaux' | 'equipements' | 'description' | 'photos' | 'categories' | 'vedette' | 'confirm';
+type VoitureStep =
+  | 'marque'
+  | 'modele'
+  | 'annee'
+  | 'prix'
+  | 'km'
+  | 'carburant'
+  | 'boite'
+  | 'couleur'
+  | 'chevaux'
+  | 'equipements'
+  | 'description'
+  | 'photos'
+  | 'categories'
+  | 'vedette'
+  | 'confirm';
 
 const STEP_PROMPTS: Record<VoitureStep, string> = {
   marque: '🚗 <b>Marque ?</b>\nEx: Peugeot, Renault, BMW...',
@@ -104,19 +120,24 @@ const STEP_PROMPTS: Record<VoitureStep, string> = {
   carburant: '⛽ <b>Carburant ?</b>',
   boite: '⚙️ <b>Boîte de vitesse ?</b>',
   couleur: '🎨 <b>Couleur ?</b>\nEx: Gris Artense, Blanc Glacier...',
-  chevaux: '🏎️ <b>Puissance / Motorisation ?</b>\nEx: 130, 2.2L, 150ch 2.0 HDi\n\nOu tape "passer" pour ignorer',
-  equipements: '📋 <b>Équipements ?</b>\nListe séparée par des virgules.\nEx: GPS, Clim auto, Caméra de recul\n\nOu tape "passer"',
-  description: '✏️ <b>Description ?</b>\n1-2 phrases sur le véhicule.\n\nOu tape "auto" pour générer automatiquement.',
+  chevaux:
+    '🏎️ <b>Puissance / Motorisation ?</b>\nEx: 130, 2.2L, 150ch 2.0 HDi\n\nOu tape "passer" pour ignorer',
+  equipements:
+    '📋 <b>Équipements ?</b>\nListe séparée par des virgules.\nEx: GPS, Clim auto, Caméra de recul\n\nOu tape "passer"',
+  description:
+    '✏️ <b>Description ?</b>\n1-2 phrases sur le véhicule.\n\nOu tape "auto" pour générer automatiquement.',
   photos: '📸 <b>Envoie les photos</b> (1 à 10)\nQuand tu as fini, tape "ok" ou "fin"',
-  categories: '📂 <b>Dans quelles catégories ?</b>\nSélectionne une ou plusieurs catégories, puis appuie sur ✅ Valider.',
-  vedette: '⭐ <b>Afficher sur l\'accueil ?</b>',
+  categories:
+    '📂 <b>Dans quelles catégories ?</b>\nSélectionne une ou plusieurs catégories, puis appuie sur ✅ Valider.',
+  vedette: "⭐ <b>Afficher sur l'accueil ?</b>",
   confirm: '',
 };
 
 function slugify(text: string): string {
   return text
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
@@ -129,22 +150,33 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const file = createWriteStream(dest);
     const client = url.startsWith('https') ? https : http;
-    client.get(url, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        downloadFile(response.headers.location!, dest).then(resolve).catch(reject);
-        return;
-      }
-      response.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', (err) => { unlinkSync(dest); reject(err); });
+    client
+      .get(url, (response) => {
+        if (response.statusCode === 301 || response.statusCode === 302) {
+          downloadFile(response.headers.location!, dest).then(resolve).catch(reject);
+          return;
+        }
+        response.pipe(file);
+        file.on('finish', () => {
+          file.close();
+          resolve();
+        });
+      })
+      .on('error', (err) => {
+        unlinkSync(dest);
+        reject(err);
+      });
   });
 }
 
-function getSoldCarsList(site: SiteConfig): Array<{ slug: string; marque: string; modele: string; prix: number }> {
+function getSoldCarsList(
+  site: SiteConfig,
+): Array<{ slug: string; marque: string; modele: string; prix: number }> {
   try {
     const content = readFileSync(join(site.projectPath, 'data/cars.ts'), 'utf-8');
     const cars: Array<{ slug: string; marque: string; modele: string; prix: number }> = [];
-    const regex = /slug:\s*["']([^"']+)["'].*?marque:\s*["']([^"']+)["'].*?modele:\s*["']([^"']+)["'].*?prix:\s*(\d+).*?disponible:\s*false/gs;
+    const regex =
+      /slug:\s*["']([^"']+)["'].*?marque:\s*["']([^"']+)["'].*?modele:\s*["']([^"']+)["'].*?prix:\s*(\d+).*?disponible:\s*false/gs;
     let match;
     while ((match = regex.exec(content)) !== null) {
       cars.push({ slug: match[1], marque: match[2], modele: match[3], prix: parseInt(match[4]) });
@@ -155,14 +187,24 @@ function getSoldCarsList(site: SiteConfig): Array<{ slug: string; marque: string
   }
 }
 
-function getCarsList(site: SiteConfig): Array<{ slug: string; marque: string; modele: string; prix: number; disponible: boolean }> {
+function getCarsList(
+  site: SiteConfig,
+): Array<{ slug: string; marque: string; modele: string; prix: number; disponible: boolean }> {
   try {
     const content = readFileSync(join(site.projectPath, 'data/cars.ts'), 'utf-8');
-    const cars: Array<{ slug: string; marque: string; modele: string; prix: number; disponible: boolean }> = [];
-    const regex = /slug:\s*["']([^"']+)["'].*?marque:\s*["']([^"']+)["'].*?modele:\s*["']([^"']+)["'].*?prix:\s*(\d+).*?disponible:\s*(true|false)/gs;
+    const cars: Array<{ slug: string; marque: string; modele: string; prix: number; disponible: boolean }> =
+      [];
+    const regex =
+      /slug:\s*["']([^"']+)["'].*?marque:\s*["']([^"']+)["'].*?modele:\s*["']([^"']+)["'].*?prix:\s*(\d+).*?disponible:\s*(true|false)/gs;
     let match;
     while ((match = regex.exec(content)) !== null) {
-      cars.push({ slug: match[1], marque: match[2], modele: match[3], prix: parseInt(match[4]), disponible: match[5] === 'true' });
+      cars.push({
+        slug: match[1],
+        marque: match[2],
+        modele: match[3],
+        prix: parseInt(match[4]),
+        disponible: match[5] === 'true',
+      });
     }
     return cars;
   } catch {
@@ -189,7 +231,7 @@ function injectCarIntoDataFile(site: SiteConfig, draft: CarDraft, slug: string):
     chevaux: ${draft.chevaux ? (/^\d+$/.test(draft.chevaux) ? draft.chevaux : `"${draft.chevaux}"`) : 0},
     couleur: "${draft.couleur || ''}",
     portes: 5,
-    equipements: [${(draft.equipements || []).map(e => `"${e.trim()}"`).join(', ')}],
+    equipements: [${(draft.equipements || []).map((e) => `"${e.trim()}"`).join(', ')}],
     description: ${JSON.stringify(draft.description || '')},
     images: [${imagesPaths.join(', ')}],
     enVedette: ${draft.enVedette ?? false},
@@ -204,7 +246,7 @@ function injectCarIntoDataFile(site: SiteConfig, draft: CarDraft, slug: string):
 function categorize(draft: CarDraft): string {
   const cats = draft.categories || [];
   if (cats.length === 0) return '"standard"';
-  return cats.map(c => `"${c}"`).join(', ');
+  return cats.map((c) => `"${c}"`).join(', ');
 }
 
 /**
@@ -217,12 +259,12 @@ const HIDDEN_CATEGORIES: Record<string, string[]> = {
 };
 
 function buildCategoryKeyboard(selected: string[], siteKey?: string): InlineKeyboard {
-  const hidden = siteKey ? HIDDEN_CATEGORIES[siteKey] ?? [] : [];
+  const hidden = siteKey ? (HIDDEN_CATEGORIES[siteKey] ?? []) : [];
   const categories = [
     { id: '4x4', label: '4x4 & SUV' },
     { id: 'petit-prix', label: 'Petit Prix' },
     { id: 'sport', label: 'Sport & Collection' },
-  ].filter(c => !hidden.includes(c.id));
+  ].filter((c) => !hidden.includes(c.id));
   const kb = new InlineKeyboard();
   for (const cat of categories) {
     const check = selected.includes(cat.id) ? '✅ ' : '';
@@ -235,7 +277,7 @@ function buildCategoryKeyboard(selected: string[], siteKey?: string): InlineKeyb
 
 function removeCarFromDataFile(site: SiteConfig, slug: string): boolean {
   const carsFile = join(site.projectPath, 'data/cars.ts');
-  let content = readFileSync(carsFile, 'utf-8');
+  const content = readFileSync(carsFile, 'utf-8');
   const regex = new RegExp(`\\s*\\{[^}]*slug:\\s*["']${slug}["'][^}]*\\},?`, 'g');
   const newContent = content.replace(regex, '');
   if (newContent === content) return false;
@@ -245,7 +287,7 @@ function removeCarFromDataFile(site: SiteConfig, slug: string): boolean {
 
 function setCarAvailability(site: SiteConfig, slug: string, disponible: boolean): boolean {
   const carsFile = join(site.projectPath, 'data/cars.ts');
-  let content = readFileSync(carsFile, 'utf-8');
+  const content = readFileSync(carsFile, 'utf-8');
   const regex = new RegExp(`(slug:\\s*["']${slug}["'][\\s\\S]*?disponible:\\s*)(?:true|false)`, 'g');
   const newContent = content.replace(regex, `$1${disponible}`);
   if (newContent === content) return false;
@@ -255,7 +297,7 @@ function setCarAvailability(site: SiteConfig, slug: string, disponible: boolean)
 
 function updateCarPrice(site: SiteConfig, slug: string, newPrice: number): boolean {
   const carsFile = join(site.projectPath, 'data/cars.ts');
-  let content = readFileSync(carsFile, 'utf-8');
+  const content = readFileSync(carsFile, 'utf-8');
   const regex = new RegExp(`(slug:\\s*["']${slug}["'][\\s\\S]*?prix:\\s*)\\d+`, 'g');
   const newContent = content.replace(regex, `$1${newPrice}`);
   if (newContent === content) return false;
@@ -275,23 +317,23 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     if (!subcommand || subcommand === 'help') {
       await ctx.reply(
         `🚗 <b>Gestion véhicules ${site.name}</b>\n\n` +
-        `/voiture add — Ajouter un véhicule\n` +
-        `/voiture list — Liste des véhicules\n` +
-        `/voiture suppr — Supprimer un véhicule\n` +
-        `/voiture vendu — Marquer comme vendu\n` +
-        `/voiture dispo — Remettre en vente\n` +
-        `/voiture prix — Modifier le prix\n` +
-        `/voiture archives — Véhicules vendus\n` +
-        `/voiture deploy — Redéployer le site` +
-        (isAdmin(ctx.chat?.id?.toString() || '') ? `\n/voiture client — Changer de client` : ''),
-        { parse_mode: 'HTML' }
+          `/voiture add — Ajouter un véhicule\n` +
+          `/voiture list — Liste des véhicules\n` +
+          `/voiture suppr — Supprimer un véhicule\n` +
+          `/voiture vendu — Marquer comme vendu\n` +
+          `/voiture dispo — Remettre en vente\n` +
+          `/voiture prix — Modifier le prix\n` +
+          `/voiture archives — Véhicules vendus\n` +
+          `/voiture deploy — Redéployer le site` +
+          (isAdmin(ctx.chat?.id?.toString() || '') ? `\n/voiture client — Changer de client` : ''),
+        { parse_mode: 'HTML' },
       );
       return;
     }
 
     if (subcommand === 'client') {
       if (!isAdmin(ctx.chat?.id?.toString() || '')) {
-        await ctx.reply('⛔ Réservé à l\'administrateur.');
+        await ctx.reply("⛔ Réservé à l'administrateur.");
         return;
       }
       await ctx.reply('🚗 <b>Quel client ?</b>', {
@@ -307,17 +349,22 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         await ctx.reply('Aucun véhicule trouvé.');
         return;
       }
-      const lines = cars.map(c => {
+      const lines = cars.map((c) => {
         const status = c.disponible ? '🟢' : '🔴 VENDU';
         return `${status} <b>${c.marque} ${c.modele}</b> — ${c.prix.toLocaleString('fr-FR')}€\n   <code>${c.slug}</code>`;
       });
-      await ctx.reply(`🚗 <b>${site.name} — véhicules (${cars.length})</b>\n\n${lines.join('\n\n')}`, { parse_mode: 'HTML' });
+      await ctx.reply(`🚗 <b>${site.name} — véhicules (${cars.length})</b>\n\n${lines.join('\n\n')}`, {
+        parse_mode: 'HTML',
+      });
       return;
     }
 
     if (subcommand === 'vendu') {
-      const cars = getCarsList(site).filter(c => c.disponible);
-      if (cars.length === 0) { await ctx.reply('Aucun véhicule en vente.'); return; }
+      const cars = getCarsList(site).filter((c) => c.disponible);
+      if (cars.length === 0) {
+        await ctx.reply('Aucun véhicule en vente.');
+        return;
+      }
 
       const kb = new InlineKeyboard();
       for (const c of cars) {
@@ -325,13 +372,19 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         kb.row();
       }
       kb.text('❌ Annuler', 'voiture_action_cancel');
-      await ctx.reply(`🔴 <b>Quel véhicule marquer comme vendu ?</b>`, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.reply(`🔴 <b>Quel véhicule marquer comme vendu ?</b>`, {
+        parse_mode: 'HTML',
+        reply_markup: kb,
+      });
       return;
     }
 
     if (subcommand === 'dispo') {
       const sold = getSoldCarsList(site);
-      if (sold.length === 0) { await ctx.reply('Aucun véhicule vendu/archivé.'); return; }
+      if (sold.length === 0) {
+        await ctx.reply('Aucun véhicule vendu/archivé.');
+        return;
+      }
 
       const kb = new InlineKeyboard();
       for (const c of sold) {
@@ -339,13 +392,19 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         kb.row();
       }
       kb.text('❌ Annuler', 'voiture_action_cancel');
-      await ctx.reply(`🟢 <b>Quel véhicule remettre en vente ?</b>`, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.reply(`🟢 <b>Quel véhicule remettre en vente ?</b>`, {
+        parse_mode: 'HTML',
+        reply_markup: kb,
+      });
       return;
     }
 
     if (subcommand === 'prix') {
-      const cars = getCarsList(site).filter(c => c.disponible);
-      if (cars.length === 0) { await ctx.reply('Aucun véhicule.'); return; }
+      const cars = getCarsList(site).filter((c) => c.disponible);
+      if (cars.length === 0) {
+        await ctx.reply('Aucun véhicule.');
+        return;
+      }
 
       const kb = new InlineKeyboard();
       for (const c of cars) {
@@ -363,16 +422,23 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         await ctx.reply('Aucun véhicule vendu/archivé.');
         return;
       }
-      const lines = sold.map(c =>
-        `🔴 <b>${c.marque} ${c.modele}</b> — ${c.prix.toLocaleString('fr-FR')}€\n   <code>${c.slug}</code>`
+      const lines = sold.map(
+        (c) =>
+          `🔴 <b>${c.marque} ${c.modele}</b> — ${c.prix.toLocaleString('fr-FR')}€\n   <code>${c.slug}</code>`,
       );
-      await ctx.reply(`📦 <b>Véhicules archivés (${sold.length})</b>\n\n${lines.join('\n\n')}\n\n💡 /voiture dispo [slug] pour remettre en vente`, { parse_mode: 'HTML' });
+      await ctx.reply(
+        `📦 <b>Véhicules archivés (${sold.length})</b>\n\n${lines.join('\n\n')}\n\n💡 /voiture dispo [slug] pour remettre en vente`,
+        { parse_mode: 'HTML' },
+      );
       return;
     }
 
     if (subcommand === 'suppr') {
-      const cars = getCarsList(site).filter(c => c.disponible);
-      if (cars.length === 0) { await ctx.reply('Aucun véhicule à supprimer.'); return; }
+      const cars = getCarsList(site).filter((c) => c.disponible);
+      if (cars.length === 0) {
+        await ctx.reply('Aucun véhicule à supprimer.');
+        return;
+      }
 
       const kb = new InlineKeyboard();
       for (const c of cars) {
@@ -409,7 +475,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     await ctx.answerCallbackQuery();
 
     if (!isAdmin(ctx.chat?.id?.toString() || '')) {
-      await ctx.reply('⛔ Réservé à l\'administrateur.');
+      await ctx.reply("⛔ Réservé à l'administrateur.");
       return;
     }
     if (!CAR_SITE_KEYS.includes(key)) {
@@ -418,10 +484,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     ctx.session.carSiteKey = key;
-    await ctx.reply(
-      `✅ Client actif : <b>${sites[key].name}</b>\n\nTape /voiture pour voir les actions.`,
-      { parse_mode: 'HTML' }
-    );
+    await ctx.reply(`✅ Client actif : <b>${sites[key].name}</b>\n\nTape /voiture pour voir les actions.`, {
+      parse_mode: 'HTML',
+    });
   });
 
   // Carburant inline keyboard
@@ -466,7 +531,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     await ctx.answerCallbackQuery();
-    await ctx.editMessageReplyMarkup({ reply_markup: buildCategoryKeyboard(draft.categories, resolveSite(ctx)?.key) });
+    await ctx.editMessageReplyMarkup({
+      reply_markup: buildCategoryKeyboard(draft.categories, resolveSite(ctx)?.key),
+    });
   });
 
   // Category done → vedette step
@@ -501,9 +568,8 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
     // Site figé au démarrage du flow (fallback : résolution normale)
     const flowSiteKey = ctx.session.context?.siteKey as string | undefined;
-    const site = (flowSiteKey && CAR_SITE_KEYS.includes(flowSiteKey))
-      ? sites[flowSiteKey]
-      : await requireSite(ctx);
+    const site =
+      flowSiteKey && CAR_SITE_KEYS.includes(flowSiteKey) ? sites[flowSiteKey] : await requireSite(ctx);
     if (!site) return;
 
     await ctx.reply(`⏳ Ajout en cours sur ${site.name}...`);
@@ -525,7 +591,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
       // Git commit + push
       try {
-        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Add vehicle: ${draft.marque} ${draft.modele} ${draft.annee}"`, { stdio: 'pipe' });
+        execSync(
+          `cd "${site.projectPath}" && git add -A && git commit -m "Add vehicle: ${draft.marque} ${draft.modele} ${draft.annee}"`,
+          { stdio: 'pipe' },
+        );
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
@@ -536,11 +605,11 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
       await ctx.reply(
         `✅ <b>${draft.marque} ${draft.modele} ${draft.annee}</b> ajouté sur ${site.name} !\n\n` +
-        `💰 ${draft.prix?.toLocaleString('fr-FR')}€ — ${draft.kilometrage?.toLocaleString('fr-FR')} km\n` +
-        `📸 ${draft.images.length} photo(s)\n` +
-        `🔗 Slug: <code>${slug}</code>\n\n` +
-        (deployed ? '🚀 Déploiement lancé — en ligne dans ~1 min' : '⚠️ Déploiement à lancer manuellement'),
-        { parse_mode: 'HTML' }
+          `💰 ${draft.prix?.toLocaleString('fr-FR')}€ — ${draft.kilometrage?.toLocaleString('fr-FR')} km\n` +
+          `📸 ${draft.images.length} photo(s)\n` +
+          `🔗 Slug: <code>${slug}</code>\n\n` +
+          (deployed ? '🚀 Déploiement lancé — en ligne dans ~1 min' : '⚠️ Déploiement à lancer manuellement'),
+        { parse_mode: 'HTML' },
       );
     } catch (e) {
       await ctx.reply(`❌ Erreur: ${(e as Error).message}`);
@@ -566,7 +635,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     if (!site) return;
     if (setCarAvailability(site, slug, false)) {
       try {
-        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Sold: ${slug}"`, { stdio: 'pipe' });
+        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Sold: ${slug}"`, {
+          stdio: 'pipe',
+        });
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
@@ -574,7 +645,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       const deployed = await triggerDeploy(site.key);
       await ctx.reply(
         `🔴 <b>${slug}</b> marqué comme vendu !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
-        { parse_mode: 'HTML' }
+        { parse_mode: 'HTML' },
       );
     } else {
       await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
@@ -589,7 +660,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     if (!site) return;
     if (setCarAvailability(site, slug, true)) {
       try {
-        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Restore: ${slug}"`, { stdio: 'pipe' });
+        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Restore: ${slug}"`, {
+          stdio: 'pipe',
+        });
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
@@ -597,7 +670,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       const deployed = await triggerDeploy(site.key);
       await ctx.reply(
         `🟢 <b>${slug}</b> remis en vente !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
-        { parse_mode: 'HTML' }
+        { parse_mode: 'HTML' },
       );
     } else {
       await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
@@ -613,10 +686,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     ctx.session.awaitingInput = 'voiture_prix';
     ctx.session.context = { slug, siteKey: site.key };
     const cars = getCarsList(site);
-    const c = cars.find(x => x.slug === slug);
+    const c = cars.find((x) => x.slug === slug);
     await ctx.reply(
       `💰 <b>${c ? `${c.marque} ${c.modele}` : slug}</b> — prix actuel : ${c?.prix.toLocaleString('fr-FR')}€\n\nTapez le nouveau prix :`,
-      { parse_mode: 'HTML' }
+      { parse_mode: 'HTML' },
     );
   });
 
@@ -628,7 +701,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     if (!site) return;
     if (removeCarFromDataFile(site, slug)) {
       try {
-        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Remove vehicle: ${slug}"`, { stdio: 'pipe' });
+        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Remove vehicle: ${slug}"`, {
+          stdio: 'pipe',
+        });
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
@@ -636,7 +711,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       const deployed = await triggerDeploy(site.key);
       await ctx.reply(
         `🗑️ <b>${slug}</b> supprimé !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
-        { parse_mode: 'HTML' }
+        { parse_mode: 'HTML' },
       );
     } else {
       await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
@@ -661,10 +736,12 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     const photos = ctx.message.photo;
     const biggestPhoto = photos[photos.length - 1];
     const file = await ctx.api.getFile(biggestPhoto.file_id);
-    const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+    const fileUrl = `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
 
     draft.images.push(fileUrl);
-    await ctx.reply(`📸 Photo ${draft.images.length} reçue. Envoie d'autres photos ou tape "ok" quand c'est fini.`);
+    await ctx.reply(
+      `📸 Photo ${draft.images.length} reçue. Envoie d'autres photos ou tape "ok" quand c'est fini.`,
+    );
   });
 
   // Text input handler for the add + price flows
@@ -673,7 +750,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     if (ctx.session.awaitingInput === 'voiture_prix') {
       const slug = ctx.session.context?.slug as string;
       const siteKey = ctx.session.context?.siteKey as string | undefined;
-      const site = (siteKey && CAR_SITE_KEYS.includes(siteKey)) ? sites[siteKey] : undefined;
+      const site = siteKey && CAR_SITE_KEYS.includes(siteKey) ? sites[siteKey] : undefined;
 
       if (!slug || !site) {
         ctx.session.awaitingInput = undefined;
@@ -697,7 +774,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       }
 
       try {
-        execSync(`cd "${site.projectPath}" && git add -A && git commit -m "Price update: ${slug} → ${prix}"`, { stdio: 'pipe' });
+        execSync(
+          `cd "${site.projectPath}" && git add -A && git commit -m "Price update: ${slug} → ${prix}"`,
+          { stdio: 'pipe' },
+        );
         execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
       } catch (e) {
         logger.warn(`Git push failed: ${(e as Error).message}`);
@@ -706,7 +786,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       const deployed = await triggerDeploy(site.key);
       await ctx.reply(
         `💰 <b>${slug}</b> → ${prix.toLocaleString('fr-FR')}€\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
-        { parse_mode: 'HTML' }
+        { parse_mode: 'HTML' },
       );
       return;
     }
@@ -746,7 +826,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
       case 'prix': {
         const prix = parseInt(text.replace(/[^\d]/g, ''));
-        if (!prix) { await ctx.reply('❌ Prix invalide.'); return; }
+        if (!prix) {
+          await ctx.reply('❌ Prix invalide.');
+          return;
+        }
         draft.prix = prix;
         ctx.session.context!.step = 'km';
         await ctx.reply(STEP_PROMPTS.km, { parse_mode: 'HTML' });
@@ -755,7 +838,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
       case 'km': {
         const km = parseInt(text.replace(/[^\d]/g, ''));
-        if (isNaN(km)) { await ctx.reply('❌ Kilométrage invalide.'); return; }
+        if (isNaN(km)) {
+          await ctx.reply('❌ Kilométrage invalide.');
+          return;
+        }
         draft.kilometrage = km;
         ctx.session.context!.step = 'carburant';
         await ctx.reply(STEP_PROMPTS.carburant, {
@@ -786,7 +872,10 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
       case 'equipements':
         if (text.toLowerCase() !== 'passer') {
-          draft.equipements = text.split(',').map(e => e.trim()).filter(Boolean);
+          draft.equipements = text
+            .split(',')
+            .map((e) => e.trim())
+            .filter(Boolean);
         }
         ctx.session.context!.step = 'description';
         await ctx.reply(STEP_PROMPTS.description, { parse_mode: 'HTML' });
@@ -795,7 +884,8 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       case 'description':
         if (text.toLowerCase() === 'auto') {
           const flowSiteKey = ctx.session.context?.siteKey as string | undefined;
-          const flowSite = (flowSiteKey && CAR_SITE_KEYS.includes(flowSiteKey)) ? sites[flowSiteKey] : undefined;
+          const flowSite =
+            flowSiteKey && CAR_SITE_KEYS.includes(flowSiteKey) ? sites[flowSiteKey] : undefined;
           const chezQui = flowSite ? ` À voir chez ${flowSite.name} à ${flowSite.city}.` : '';
           draft.description = `${draft.marque} ${draft.modele} ${draft.annee}, ${draft.kilometrage?.toLocaleString('fr-FR')} km, ${draft.carburant}, boîte ${draft.boiteVitesse?.toLowerCase()}. Véhicule en excellent état, entretien suivi. ${draft.couleur ? `Couleur ${draft.couleur}.` : ''}${chezQui}`;
         } else {
@@ -808,7 +898,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       case 'photos':
         if (text.toLowerCase() === 'ok' || text.toLowerCase() === 'fin' || text.toLowerCase() === 'done') {
           if (draft.images.length === 0) {
-            await ctx.reply('⚠️ Au moins 1 photo requise. Envoie une photo ou tape "sans" pour continuer sans.');
+            await ctx.reply(
+              '⚠️ Au moins 1 photo requise. Envoie une photo ou tape "sans" pour continuer sans.',
+            );
             return;
           }
           draft.categories = [];
@@ -844,7 +936,9 @@ async function showConfirmation(ctx: BotContext, draft: CarDraft) {
     (draft.couleur ? `🎨 ${draft.couleur}\n` : '') +
     (draft.chevaux ? `🏎️ ${draft.chevaux}\n` : '') +
     (draft.equipements?.length ? `📋 ${draft.equipements.join(', ')}\n` : '') +
-    (draft.categories?.length ? `📂 ${draft.categories.map(c => c === '4x4' ? '4x4 & SUV' : c === 'petit-prix' ? 'Petit Prix' : c === 'sport' ? 'Sport & Collection' : c).join(', ')}\n` : '') +
+    (draft.categories?.length
+      ? `📂 ${draft.categories.map((c) => (c === '4x4' ? '4x4 & SUV' : c === 'petit-prix' ? 'Petit Prix' : c === 'sport' ? 'Sport & Collection' : c)).join(', ')}\n`
+      : '') +
     `📸 ${draft.images.length} photo(s)\n` +
     `⭐ ${draft.enVedette ? 'En vedette (accueil)' : 'Catalogue uniquement'}\n` +
     `🔗 <code>${slug}</code>\n\n` +

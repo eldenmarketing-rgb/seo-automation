@@ -1,13 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
-import dotenv from 'dotenv';
+import { requireEnv } from '../src/config/env.js';
 // override: le shell du VPS porte un SUPABASE_ACCESS_TOKEN périmé qui masquait
 // celui du .env et faisait échouer toutes les migrations en 401 (W0.3).
-dotenv.config({ override: true });
 
-const url = process.env.SUPABASE_URL!;
-const serviceKey = process.env.SUPABASE_SERVICE_KEY!;
-const accessToken = process.env.SUPABASE_ACCESS_TOKEN!;
+const url = requireEnv('SUPABASE_URL');
+const serviceKey = requireEnv('SUPABASE_SERVICE_KEY');
+const accessToken = requireEnv('SUPABASE_ACCESS_TOKEN');
 const projectRef = url.replace('https://', '').split('.')[0];
 
 const sqlFile = process.argv[2] || 'src/db/migration-new-tables.sql';
@@ -22,14 +21,14 @@ async function run() {
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ query: sql }),
   });
 
   const body = await res.text();
-  
+
   if (res.ok) {
     console.log('✅ Migration exécutée avec succès !\n');
   } else {
@@ -40,12 +39,22 @@ async function run() {
   // Vérification
   console.log('Vérification des tables :');
   const db = createClient(url, serviceKey);
-  await new Promise(r => setTimeout(r, 3000)); // attendre le cache schema
-  
-  const tables = ['seo_pages', 'gsc_positions', 'optimization_queue', 'automation_logs',
-                  'bot_settings', 'page_images', 'blog_articles', 'vehicles', 'menu_categories', 'menu_items'];
+  await new Promise((r) => setTimeout(r, 3000)); // attendre le cache schema
+
+  const tables = [
+    'seo_pages',
+    'gsc_positions',
+    'optimization_queue',
+    'automation_logs',
+    'bot_settings',
+    'page_images',
+    'blog_articles',
+    'vehicles',
+    'menu_categories',
+    'menu_items',
+  ];
   for (const t of tables) {
-    const { data, error } = await db.from(t).select('*').limit(0);
+    const { error } = await db.from(t).select('*').limit(0);
     console.log(`  ${error ? '❌' : '✅'} ${t}`);
   }
 }

@@ -1,11 +1,25 @@
 node_modules/
 dist/
-.env
+coverage/
 *.log
+*.tsbuildinfo
+
+# Secrets — NON NÉGOCIABLE (CLAUDE.md > Sécurité)
+.env
+.env.*
+!.env.example
 config/gsc-service-account.json
 .vercel
 
-# Artefacts de travail non versionnés (inventaire W0 du 2026-08-23)
+# Sorties d'analyse (rapports, exports) : données, pas du code
+reports/
+
+# Artefacts de session Claude Code
+.claude/RESUME.md
+.claude/settings.local.json
+
+# Artefacts de travail
 _w0-*.ts
 *.zip
 scripts/_tmp-*
+scripts/oneshot/_tmp-*

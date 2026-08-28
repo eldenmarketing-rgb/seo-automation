@@ -19,8 +19,6 @@
  * site_key par config/gsc-sites.ts. Une propriété non mappée ou un site sans
  * propriété est loggé, jamais inventé.
  */
-import dotenv from 'dotenv';
-dotenv.config();
 
 import { getSearchConsole } from '../gsc/auth.js';
 import { fetchGscRange, storeGscData, fetchGscPageRange, storeGscPageData } from '../gsc/client.js';
@@ -57,7 +55,11 @@ async function discoverProperties(): Promise<Map<string, string>> {
 
   for (const entry of res.data.siteEntry || []) {
     const url = entry.siteUrl || '';
-    const domain = url.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+    const domain = url
+      .replace(/^sc-domain:/, '')
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/$/, '');
     const siteKey = gscSites[domain];
     if (siteKey) {
       found.set(siteKey, url);
@@ -68,7 +70,9 @@ async function discoverProperties(): Promise<Map<string, string>> {
 
   for (const [domain, siteKey] of Object.entries(gscSites)) {
     if (!found.has(siteKey)) {
-      logger.warn(`GSC sync: pas de propriété accessible pour ${siteKey} (${domain}) — ajouter le service account dans sa Search Console`);
+      logger.warn(
+        `GSC sync: pas de propriété accessible pour ${siteKey} (${domain}) — ajouter le service account dans sa Search Console`,
+      );
     }
   }
 
@@ -83,7 +87,9 @@ async function run() {
   const targets = [...properties.entries()].filter(([key]) => !onlySite || key === onlySite);
 
   if (targets.length === 0) {
-    logger.error(`GSC sync: aucun site à synchroniser${onlySite ? ` (site inconnu ou sans propriété : ${onlySite})` : ''}`);
+    logger.error(
+      `GSC sync: aucun site à synchroniser${onlySite ? ` (site inconnu ou sans propriété : ${onlySite})` : ''}`,
+    );
     process.exit(1);
   }
 
@@ -108,7 +114,10 @@ async function run() {
         const pageRows = await fetchGscPageRange(siteKey, propertyUrl, chunkStart, chunkEnd);
         const storedPages = await storeGscPageData(pageRows);
         total += stored;
-        if (backfill) logger.info(`  ${siteKey} ${chunkStart} → ${chunkEnd} : ${stored} lignes requête · ${storedPages} lignes page`);
+        if (backfill)
+          logger.info(
+            `  ${siteKey} ${chunkStart} → ${chunkEnd} : ${stored} lignes requête · ${storedPages} lignes page`,
+          );
       }
       results[siteKey] = total;
       logger.success(`GSC sync ${siteKey}: ${total} lignes`);
@@ -120,12 +129,19 @@ async function run() {
   }
 
   const durationMs = Date.now() - startTime;
-  await log('gsc-sync', action, hadError ? 'warning' : 'success', undefined, {
-    period: { start: fmt(start), end: fmt(end) },
-    rows_by_site: results,
-    trigger,
-    only_site: onlySite ?? null,
-  }, durationMs);
+  await log(
+    'gsc-sync',
+    action,
+    hadError ? 'warning' : 'success',
+    undefined,
+    {
+      period: { start: fmt(start), end: fmt(end) },
+      rows_by_site: results,
+      trigger,
+      only_site: onlySite ?? null,
+    },
+    durationMs,
+  );
 
   logger.success(`GSC sync terminé en ${Math.round(durationMs / 1000)}s`);
 }

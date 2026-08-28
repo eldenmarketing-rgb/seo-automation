@@ -9,6 +9,7 @@ import { join } from 'path';
 import { execSync } from 'child_process';
 import https from 'https';
 import http from 'http';
+import { env } from '../../config/env.js';
 
 const SITE_KEY = 'restaurant';
 const site = sites[SITE_KEY];
@@ -37,7 +38,7 @@ interface ProductDraft {
 type ProduitStep = 'name' | 'category' | 'price' | 'volume' | 'description' | 'photo' | 'popular' | 'confirm';
 
 const STEP_PROMPTS: Record<ProduitStep, string> = {
-  name: '🏷️ <b>Nom du produit ?</b>\nEx: Heineken 33cl, Jack Daniel\'s 70cl...',
+  name: "🏷️ <b>Nom du produit ?</b>\nEx: Heineken 33cl, Jack Daniel's 70cl...",
   category: '📂 <b>Catégorie ?</b>',
   price: '💰 <b>Prix ?</b>\nEx: 3.50, 25, 12...',
   volume: '📏 <b>Volume / Contenance ?</b>\nEx: 33cl, 75cl, 1.5L, Pack, 250g...',
@@ -50,7 +51,8 @@ const STEP_PROMPTS: Record<ProduitStep, string> = {
 function slugify(text: string): string {
   return text
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
@@ -59,22 +61,43 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const file = createWriteStream(dest);
     const client = url.startsWith('https') ? https : http;
-    client.get(url, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        downloadFile(response.headers.location!, dest).then(resolve).catch(reject);
-        return;
-      }
-      response.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', (err) => { unlinkSync(dest); reject(err); });
+    client
+      .get(url, (response) => {
+        if (response.statusCode === 301 || response.statusCode === 302) {
+          downloadFile(response.headers.location!, dest).then(resolve).catch(reject);
+          return;
+        }
+        response.pipe(file);
+        file.on('finish', () => {
+          file.close();
+          resolve();
+        });
+      })
+      .on('error', (err) => {
+        unlinkSync(dest);
+        reject(err);
+      });
   });
 }
 
-function getProductsList(): Array<{ slug: string; name: string; price: number; category: string; available: boolean }> {
+function getProductsList(): Array<{
+  slug: string;
+  name: string;
+  price: number;
+  category: string;
+  available: boolean;
+}> {
   try {
     const content = readFileSync(CATALOGUE_FILE, 'utf-8');
-    const products: Array<{ slug: string; name: string; price: number; category: string; available: boolean }> = [];
-    const regex = /slug:\s*["']([^"']+)["'].*?name:\s*["']([^"']+)["'].*?category:\s*["']([^"']+)["'].*?price:\s*([\d.]+).*?available:\s*(true|false)/gs;
+    const products: Array<{
+      slug: string;
+      name: string;
+      price: number;
+      category: string;
+      available: boolean;
+    }> = [];
+    const regex =
+      /slug:\s*["']([^"']+)["'].*?name:\s*["']([^"']+)["'].*?category:\s*["']([^"']+)["'].*?price:\s*([\d.]+).*?available:\s*(true|false)/gs;
     let match;
     while ((match = regex.exec(content)) !== null) {
       products.push({
@@ -92,7 +115,7 @@ function getProductsList(): Array<{ slug: string; name: string; price: number; c
 }
 
 function setProductAvailability(slug: string, available: boolean): boolean {
-  let content = readFileSync(CATALOGUE_FILE, 'utf-8');
+  const content = readFileSync(CATALOGUE_FILE, 'utf-8');
   const regex = new RegExp(`(slug:\\s*["']${slug}["'][\\s\\S]*?available:\\s*)(?:true|false)`, 'g');
   const newContent = content.replace(regex, `$1${available}`);
   if (newContent === content) return false;
@@ -101,7 +124,7 @@ function setProductAvailability(slug: string, available: boolean): boolean {
 }
 
 function updateProductPrice(slug: string, newPrice: number): boolean {
-  let content = readFileSync(CATALOGUE_FILE, 'utf-8');
+  const content = readFileSync(CATALOGUE_FILE, 'utf-8');
   const regex = new RegExp(`(slug:\\s*["']${slug}["'][\\s\\S]*?price:\\s*)[\\d.]+`, 'g');
   const newContent = content.replace(regex, `$1${newPrice}`);
   if (newContent === content) return false;
@@ -110,7 +133,7 @@ function updateProductPrice(slug: string, newPrice: number): boolean {
 }
 
 function removeProduct(slug: string): boolean {
-  let content = readFileSync(CATALOGUE_FILE, 'utf-8');
+  const content = readFileSync(CATALOGUE_FILE, 'utf-8');
   // Match the full product object including the trailing comma
   const regex = new RegExp(`\\s*\\{[^}]*slug:\\s*["']${slug}["'][^}]*\\},?`, 'g');
   const newContent = content.replace(regex, '');
@@ -151,7 +174,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
   bot.command('produit', async (ctx) => {
     const chatId = ctx.chat?.id?.toString() || '';
     if (!canAccessSite(chatId, SITE_KEY)) {
-      await ctx.reply('⛔ Vous n\'avez pas accès à cette commande.');
+      await ctx.reply("⛔ Vous n'avez pas accès à cette commande.");
       return;
     }
 
@@ -161,13 +184,13 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     if (!subcommand || subcommand === 'help') {
       await ctx.reply(
         `🍾 <b>Gestion catalogue Mon Sauveur</b>\n\n` +
-        `/produit add — Ajouter un produit\n` +
-        `/produit list — Liste des produits\n` +
-        `/produit suppr — Supprimer un produit\n` +
-        `/produit dispo — Remettre disponible\n` +
-        `/produit prix — Modifier le prix\n` +
-        `/produit deploy — Redéployer le site`,
-        { parse_mode: 'HTML' }
+          `/produit add — Ajouter un produit\n` +
+          `/produit list — Liste des produits\n` +
+          `/produit suppr — Supprimer un produit\n` +
+          `/produit dispo — Remettre disponible\n` +
+          `/produit prix — Modifier le prix\n` +
+          `/produit deploy — Redéployer le site`,
+        { parse_mode: 'HTML' },
       );
       return;
     }
@@ -202,8 +225,11 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'suppr') {
-      const products = getProductsList().filter(p => p.available);
-      if (products.length === 0) { await ctx.reply('Aucun produit à supprimer.'); return; }
+      const products = getProductsList().filter((p) => p.available);
+      if (products.length === 0) {
+        await ctx.reply('Aucun produit à supprimer.');
+        return;
+      }
 
       // Group by category, show buttons
       const catLabels: Record<string, string> = {};
@@ -215,10 +241,10 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
         grouped[p.category].push(p);
       }
 
-      let msg = `🗑️ <b>Quel produit supprimer ?</b>\n`;
+      const msg = `🗑️ <b>Quel produit supprimer ?</b>\n`;
       const kb = new InlineKeyboard();
       let count = 0;
-      for (const [cat, items] of Object.entries(grouped)) {
+      for (const items of Object.values(grouped)) {
         for (const p of items) {
           kb.text(`${p.name} (${p.price}€)`, `produit_del:${p.slug}`);
           kb.row();
@@ -231,8 +257,11 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'dispo') {
-      const products = getProductsList().filter(p => !p.available);
-      if (products.length === 0) { await ctx.reply('Aucun produit indisponible.'); return; }
+      const products = getProductsList().filter((p) => !p.available);
+      if (products.length === 0) {
+        await ctx.reply('Aucun produit indisponible.');
+        return;
+      }
 
       const kb = new InlineKeyboard();
       for (const p of products) {
@@ -240,13 +269,19 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
         kb.row();
       }
       kb.text('❌ Annuler', 'produit_del_cancel');
-      await ctx.reply(`🟢 <b>Quel produit remettre disponible ?</b>`, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.reply(`🟢 <b>Quel produit remettre disponible ?</b>`, {
+        parse_mode: 'HTML',
+        reply_markup: kb,
+      });
       return;
     }
 
     if (subcommand === 'prix') {
-      const products = getProductsList().filter(p => p.available);
-      if (products.length === 0) { await ctx.reply('Aucun produit.'); return; }
+      const products = getProductsList().filter((p) => p.available);
+      if (products.length === 0) {
+        await ctx.reply('Aucun produit.');
+        return;
+      }
 
       const kb = new InlineKeyboard();
       for (const p of products) {
@@ -284,7 +319,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
       const deployed = await triggerDeploy(SITE_KEY);
       await ctx.reply(
         `🗑️ <b>${slug}</b> supprimé !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
-        { parse_mode: 'HTML' }
+        { parse_mode: 'HTML' },
       );
     } else {
       await ctx.reply(`❌ Produit "${slug}" non trouvé.`);
@@ -298,10 +333,9 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     if (setProductAvailability(slug, true)) {
       gitCommitAndPush(`Set available: ${slug}`);
       const deployed = await triggerDeploy(SITE_KEY);
-      await ctx.reply(
-        `🟢 <b>${slug}</b> remis disponible !\n${deployed ? '🚀 Déploiement lancé !' : ''}`,
-        { parse_mode: 'HTML' }
-      );
+      await ctx.reply(`🟢 <b>${slug}</b> remis disponible !\n${deployed ? '🚀 Déploiement lancé !' : ''}`, {
+        parse_mode: 'HTML',
+      });
     } else {
       await ctx.reply(`❌ Produit "${slug}" non trouvé.`);
     }
@@ -314,11 +348,10 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     ctx.session.awaitingInput = 'produit_prix';
     ctx.session.context = { slug };
     const products = getProductsList();
-    const p = products.find(x => x.slug === slug);
-    await ctx.reply(
-      `💰 <b>${p?.name || slug}</b> — prix actuel : ${p?.price}€\n\nTapez le nouveau prix :`,
-      { parse_mode: 'HTML' }
-    );
+    const p = products.find((x) => x.slug === slug);
+    await ctx.reply(`💰 <b>${p?.name || slug}</b> — prix actuel : ${p?.price}€\n\nTapez le nouveau prix :`, {
+      parse_mode: 'HTML',
+    });
   });
 
   // Cancel button
@@ -375,12 +408,12 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
       await ctx.reply(
         `✅ <b>${draft.name}</b> ajouté !\n\n` +
-        `📂 ${CATEGORIES.find(c => c.slug === draft.category)?.label || draft.category}\n` +
-        `💰 ${draft.price}€ — ${draft.volume}\n` +
-        `📸 ${draft.image ? 'Avec image' : 'Sans image'}\n` +
-        `🔗 Slug: <code>${slug}</code>\n\n` +
-        (deployed ? '🚀 Déploiement lancé — en ligne dans ~1 min' : '⚠️ Déploiement à lancer manuellement'),
-        { parse_mode: 'HTML' }
+          `📂 ${CATEGORIES.find((c) => c.slug === draft.category)?.label || draft.category}\n` +
+          `💰 ${draft.price}€ — ${draft.volume}\n` +
+          `📸 ${draft.image ? 'Avec image' : 'Sans image'}\n` +
+          `🔗 Slug: <code>${slug}</code>\n\n` +
+          (deployed ? '🚀 Déploiement lancé — en ligne dans ~1 min' : '⚠️ Déploiement à lancer manuellement'),
+        { parse_mode: 'HTML' },
       );
     } catch (e) {
       await ctx.reply(`❌ Erreur: ${(e as Error).message}`);
@@ -410,7 +443,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     const photos = ctx.message.photo;
     const biggestPhoto = photos[photos.length - 1];
     const file = await ctx.api.getFile(biggestPhoto.file_id);
-    const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+    const fileUrl = `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
 
     draft.image = fileUrl;
 
@@ -446,10 +479,9 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     if (updateProductPrice(slug, newPrice)) {
       gitCommitAndPush(`Update price: ${slug} → ${newPrice}€`);
       const deployed = await triggerDeploy(SITE_KEY);
-      await ctx.reply(
-        `💰 <b>${slug}</b> → ${newPrice}€\n${deployed ? '🚀 Déploiement lancé !' : ''}`,
-        { parse_mode: 'HTML' }
-      );
+      await ctx.reply(`💰 <b>${slug}</b> → ${newPrice}€\n${deployed ? '🚀 Déploiement lancé !' : ''}`, {
+        parse_mode: 'HTML',
+      });
     } else {
       await ctx.reply(`❌ Produit "${slug}" non trouvé.`);
     }
@@ -482,7 +514,10 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
       case 'price': {
         const price = parseFloat(text.replace(',', '.').replace(/[^\d.]/g, ''));
-        if (!price || price <= 0) { await ctx.reply('❌ Prix invalide. Ex: 3.50, 25...'); return; }
+        if (!price || price <= 0) {
+          await ctx.reply('❌ Prix invalide. Ex: 3.50, 25...');
+          return;
+        }
         draft.price = price;
         ctx.session.context!.step = 'volume';
         await ctx.reply(STEP_PROMPTS.volume, { parse_mode: 'HTML' });
@@ -522,7 +557,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
 async function showConfirmation(ctx: BotContext, draft: ProductDraft) {
   const slug = slugify(`${draft.name}`);
-  const catLabel = CATEGORIES.find(c => c.slug === draft.category)?.label || draft.category;
+  const catLabel = CATEGORIES.find((c) => c.slug === draft.category)?.label || draft.category;
 
   const summary =
     `🍾 <b>Récapitulatif</b>\n\n` +

@@ -1,11 +1,8 @@
-import dotenv from 'dotenv';
-dotenv.config();
-
-import * as readline from 'readline';
 import * as fs from 'fs';
+import { requireEnv } from '../src/config/env.js';
 
-const CLIENT_ID = process.env.GSC_CLIENT_ID!;
-const CLIENT_SECRET = process.env.GSC_CLIENT_SECRET!;
+const CLIENT_ID = requireEnv('GSC_CLIENT_ID');
+const CLIENT_SECRET = requireEnv('GSC_CLIENT_SECRET');
 const REDIRECT_URI = 'https://garage-perpignan.fr/api/gsc-callback';
 const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly';
 
@@ -40,7 +37,7 @@ if (mode === 'exchange') {
       }),
     });
 
-    const tokens = await tokenRes.json() as Record<string, unknown>;
+    const tokens = (await tokenRes.json()) as Record<string, unknown>;
 
     if (tokens.error) {
       console.error(`\n❌ Erreur: ${tokens.error}`);

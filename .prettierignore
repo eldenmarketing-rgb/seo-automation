@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+reports/
+scripts/oneshot/
+scripts/submit-directories/
+package-lock.json
+*.sql
+*.md

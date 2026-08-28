@@ -1,24 +1,22 @@
 /**
  * SERP Competitor Analysis
- * 
+ *
  * Analyse les pages top 3 de Google pour une requête donnée.
  * Extrait : termes manquants, structure (H2), longueur de contenu, FAQ.
  * Injecte les résultats dans le prompt pour que le contenu généré surpasse les concurrents.
- * 
+ *
  * Utilise DataForSEO SERP API pour récupérer les résultats Google,
  * puis fetch le contenu des pages pour analyse.
- * 
+ *
  * Coût : ~0.002$ par requête SERP + temps de fetch des pages.
  */
 
 import * as logger from '../utils/logger.js';
 import { withDfsCache } from '../dataforseo/cache.js';
-import dotenv from 'dotenv';
+import { env } from '../config/env.js';
 
-dotenv.config();
-
-const DATAFORSEO_LOGIN = process.env.DATAFORSEO_LOGIN || '';
-const DATAFORSEO_PASSWORD = process.env.DATAFORSEO_PASSWORD || '';
+const DATAFORSEO_LOGIN = env.DATAFORSEO_LOGIN ?? '';
+const DATAFORSEO_PASSWORD = env.DATAFORSEO_PASSWORD ?? '';
 const API_BASE = 'https://api.dataforseo.com/v3';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -34,9 +32,9 @@ export interface SerpCompetitor {
 export interface ContentAnalysis {
   url: string;
   wordCount: number;
-  headings: string[];          // H2 extraits
-  subHeadings: string[];       // H3 extraits — profondeur de la structure
-  keyTerms: string[];          // Termes fréquents (TF)
+  headings: string[]; // H2 extraits
+  subHeadings: string[]; // H3 extraits — profondeur de la structure
+  keyTerms: string[]; // Termes fréquents (TF)
   hasFaq: boolean;
   faqCount: number;
   hasSchema: boolean;
@@ -68,11 +66,11 @@ export interface SerpInsight {
   query: string;
   competitors: SerpCompetitor[];
   contentAnalyses: ContentAnalysis[];
-  missingTerms: string[];      // Termes présents chez les concurrents mais pas dans notre requête
+  missingTerms: string[]; // Termes présents chez les concurrents mais pas dans notre requête
   averageWordCount: number;
-  recommendedStructure: string[];  // H2 suggérés
+  recommendedStructure: string[]; // H2 suggérés
   structure: SerpStructure;
-  promptBlock: string;         // Bloc prêt à injecter dans le prompt
+  promptBlock: string; // Bloc prêt à injecter dans le prompt
 }
 
 // ─── SERP Fetch ──────────────────────────────────────────────
@@ -87,20 +85,22 @@ async function fetchSerpResults(query: string): Promise<SerpCompetitor[]> {
     const auth = 'Basic ' + Buffer.from(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`).toString('base64');
 
     const endpoint = '/serp/google/organic/live/advanced';
-    const body = [{
-      keyword: query,
-      location_code: 2250,  // France
-      language_code: 'fr',
-      device: 'desktop',
-      depth: 5,             // Top 5 seulement
-    }];
+    const body = [
+      {
+        keyword: query,
+        location_code: 2250, // France
+        language_code: 'fr',
+        device: 'desktop',
+        depth: 5, // Top 5 seulement
+      },
+    ];
 
     // Chaque brief déclenchait une SERP payante, même sur une requête déjà
     // achetée la veille. Cache 7 jours (W0.3).
     const data = await withDfsCache<any>(endpoint, body, async () => {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
-        headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+        headers: { Authorization: auth, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       return await response.json();
@@ -144,8 +144,8 @@ async function analyzePageContent(url: string): Promise<ContentAnalysis | null> 
     // Extraire les H2
     const h2Matches = html.match(/<h2[^>]*>(.*?)<\/h2>/gi) || [];
     const headings = h2Matches
-      .map(h => h.replace(/<[^>]+>/g, '').trim())
-      .filter(h => h.length > 5 && h.length < 200);
+      .map((h) => h.replace(/<[^>]+>/g, '').trim())
+      .filter((h) => h.length > 5 && h.length < 200);
 
     // Compter les mots (texte brut)
     const textContent = html
@@ -157,12 +157,32 @@ async function analyzePageContent(url: string): Promise<ContentAnalysis | null> 
     const wordCount = textContent.split(/\s+/).length;
 
     // Extraire les termes fréquents (simple TF)
-    const words = textContent.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const words = textContent
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .split(/\s+/)
-      .filter(w => w.length > 4)
-      .filter(w => !['cette', 'votre', 'notre', 'leurs', 'entre', 'aussi', 'toute', 'comme', 'apres', 'avant', 'depuis', 'encore', 'meme', 'plus'].includes(w));
-    
+      .filter((w) => w.length > 4)
+      .filter(
+        (w) =>
+          ![
+            'cette',
+            'votre',
+            'notre',
+            'leurs',
+            'entre',
+            'aussi',
+            'toute',
+            'comme',
+            'apres',
+            'avant',
+            'depuis',
+            'encore',
+            'meme',
+            'plus',
+          ].includes(w),
+      );
+
     const freq = new Map<string, number>();
     for (const w of words) {
       freq.set(w, (freq.get(w) || 0) + 1);
@@ -182,34 +202,43 @@ async function analyzePageContent(url: string): Promise<ContentAnalysis | null> 
 
     // H3 : indique si les concurrents structurent l'intérieur de leurs sections
     const subHeadings = (html.match(/<h3[^>]*>(.*?)<\/h3>/gi) || [])
-      .map(h => h.replace(/<[^>]+>/g, '').trim())
-      .filter(h => h.length > 3 && h.length < 200);
+      .map((h) => h.replace(/<[^>]+>/g, '').trim())
+      .filter((h) => h.length > 3 && h.length < 200);
 
     // Un tableau de mise en page n'est pas un tableau de données : on exige au
     // moins deux lignes d'en-tête ou trois lignes de corps.
-    const tableCount = (html.match(/<table[^>]*>[\s\S]*?<\/table>/gi) || [])
-      .filter(t => (t.match(/<th[^>]*>/gi) || []).length >= 2 || (t.match(/<tr[^>]*>/gi) || []).length >= 3)
-      .length;
+    const tableCount = (html.match(/<table[^>]*>[\s\S]*?<\/table>/gi) || []).filter(
+      (t) => (t.match(/<th[^>]*>/gi) || []).length >= 2 || (t.match(/<tr[^>]*>/gi) || []).length >= 3,
+    ).length;
 
     // Idem pour les listes : les menus de navigation en sont truffés, on ne
     // compte que celles qui portent du texte.
-    const listCount = (html.match(/<[uo]l[^>]*>[\s\S]*?<\/[uo]l>/gi) || [])
-      .filter(l => {
-        const items = l.match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
-        if (items.length < 3) return false;
-        const avgLen = items.reduce((n, i) => n + i.replace(/<[^>]+>/g, '').trim().length, 0) / items.length;
-        return avgLen > 25;
-      })
-      .length;
+    const listCount = (html.match(/<[uo]l[^>]*>[\s\S]*?<\/[uo]l>/gi) || []).filter((l) => {
+      const items = l.match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
+      if (items.length < 3) return false;
+      const avgLen = items.reduce((n, i) => n + i.replace(/<[^>]+>/g, '').trim().length, 0) / items.length;
+      return avgLen > 25;
+    }).length;
 
-    const sentences = textContent.split(/[.!?…]+\s/).filter(s => s.trim().split(/\s+/).length >= 3);
+    const sentences = textContent.split(/[.!?…]+\s/).filter((s) => s.trim().split(/\s+/).length >= 3);
     const avgSentenceWords = sentences.length
-      ? Math.round((sentences.reduce((n, s) => n + s.trim().split(/\s+/).length, 0) / sentences.length) * 10) / 10
+      ? Math.round(
+          (sentences.reduce((n, s) => n + s.trim().split(/\s+/).length, 0) / sentences.length) * 10,
+        ) / 10
       : 0;
 
     return {
-      url, wordCount, headings, subHeadings, keyTerms, hasFaq, faqCount, hasSchema,
-      tableCount, listCount, avgSentenceWords,
+      url,
+      wordCount,
+      headings,
+      subHeadings,
+      keyTerms,
+      hasFaq,
+      faqCount,
+      hasSchema,
+      tableCount,
+      listCount,
+      avgSentenceWords,
     };
   } catch (e) {
     logger.warn(`Content analysis failed for ${url}: ${(e as Error).message}`);
@@ -225,7 +254,7 @@ async function analyzePageContent(url: string): Promise<ContentAnalysis | null> 
  */
 export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight | null> {
   logger.info(`SERP analysis for: "${query}"`);
-  
+
   // 1. Récupérer les résultats SERP
   const competitors = await fetchSerpResults(query);
   if (competitors.length === 0) {
@@ -244,7 +273,7 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
 
   // 3. Calculer les insights
   const avgWordCount = Math.round(analyses.reduce((sum, a) => sum + a.wordCount, 0) / analyses.length);
-  
+
   // Termes communs aux concurrents (apparaissent chez 2+ concurrents)
   const termFreq = new Map<string, number>();
   for (const analysis of analyses) {
@@ -259,7 +288,7 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
     .map(([term]) => term);
 
   // H2 communs
-  const allHeadings = analyses.flatMap(a => a.headings);
+  const allHeadings = analyses.flatMap((a) => a.headings);
   const recommendedStructure = [...new Set(allHeadings)].slice(0, 8);
 
   const avg = (pick: (a: ContentAnalysis) => number) =>
@@ -267,17 +296,25 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
 
   const structure: SerpStructure = {
     analyzed: analyses.length,
-    withTable: analyses.filter(a => a.tableCount > 0).length,
-    withList: analyses.filter(a => a.listCount > 0).length,
-    withH3: analyses.filter(a => a.subHeadings.length >= 2).length,
-    withFaq: analyses.filter(a => a.faqCount >= 3).length,
-    avgSections: avg(a => a.headings.length),
-    avgSubHeadings: avg(a => a.subHeadings.length),
-    avgSentenceWords: avg(a => a.avgSentenceWords),
+    withTable: analyses.filter((a) => a.tableCount > 0).length,
+    withList: analyses.filter((a) => a.listCount > 0).length,
+    withH3: analyses.filter((a) => a.subHeadings.length >= 2).length,
+    withFaq: analyses.filter((a) => a.faqCount >= 3).length,
+    avgSections: avg((a) => a.headings.length),
+    avgSubHeadings: avg((a) => a.subHeadings.length),
+    avgSentenceWords: avg((a) => a.avgSentenceWords),
   };
 
   // 4. Construire le bloc prompt
-  const promptBlock = buildSerpPromptBlock(query, competitors, analyses, missingTerms, avgWordCount, recommendedStructure, structure);
+  const promptBlock = buildSerpPromptBlock(
+    query,
+    competitors,
+    analyses,
+    missingTerms,
+    avgWordCount,
+    recommendedStructure,
+    structure,
+  );
 
   return {
     query,
@@ -298,7 +335,7 @@ function buildSerpPromptBlock(
   missingTerms: string[],
   avgWordCount: number,
   structure: string[],
-  shape: SerpStructure
+  shape: SerpStructure,
 ): string {
   const parts: string[] = [];
 
@@ -311,23 +348,27 @@ function buildSerpPromptBlock(
     parts.push(`#${comp.position} — ${comp.domain}`);
     parts.push(`  Title : "${comp.title}"`);
     if (analysis) {
-      parts.push(`  Mots : ${analysis.wordCount} | H2 : ${analysis.headings.length} | FAQ : ${analysis.faqCount} | Schema : ${analysis.hasSchema ? 'oui' : 'non'}`);
+      parts.push(
+        `  Mots : ${analysis.wordCount} | H2 : ${analysis.headings.length} | FAQ : ${analysis.faqCount} | Schema : ${analysis.hasSchema ? 'oui' : 'non'}`,
+      );
     }
   }
 
   parts.push('');
-  parts.push(`LONGUEUR CIBLE : ${Math.max(avgWordCount + 200, 1200)} mots minimum (concurrents : ${avgWordCount} mots en moyenne)`);
+  parts.push(
+    `LONGUEUR CIBLE : ${Math.max(avgWordCount + 200, 1200)} mots minimum (concurrents : ${avgWordCount} mots en moyenne)`,
+  );
 
   if (missingTerms.length > 0) {
     parts.push('');
     parts.push(`TERMES SÉMANTIQUES À INTÉGRER (présents chez les concurrents) :`);
-    parts.push(missingTerms.map(t => `- ${t}`).join('\n'));
+    parts.push(missingTerms.map((t) => `- ${t}`).join('\n'));
   }
 
   if (structure.length > 0) {
     parts.push('');
     parts.push(`STRUCTURE H2 DES CONCURRENTS (inspire-toi, ne copie pas) :`);
-    parts.push(structure.map(h => `- ${h}`).join('\n'));
+    parts.push(structure.map((h) => `- ${h}`).join('\n'));
   }
 
   if (shape.analyzed > 0) {
@@ -341,7 +382,9 @@ function buildSerpPromptBlock(
   }
 
   parts.push('');
-  parts.push(`OBJECTIF : Ton contenu doit être PLUS complet, MIEUX structuré et PLUS utile que les 3 premiers résultats ci-dessus.`);
+  parts.push(
+    `OBJECTIF : Ton contenu doit être PLUS complet, MIEUX structuré et PLUS utile que les 3 premiers résultats ci-dessus.`,
+  );
 
   return parts.join('\n');
 }
@@ -357,10 +400,12 @@ export async function quickSerpTerms(query: string): Promise<string[]> {
   // Extraire les termes depuis les descriptions SERP uniquement (pas de fetch)
   const allTerms: string[] = [];
   for (const comp of competitors) {
-    const text = `${comp.title} ${comp.description}`.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const text = `${comp.title} ${comp.description}`
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .split(/\s+/)
-      .filter(w => w.length > 4);
+      .filter((w) => w.length > 4);
     allTerms.push(...text);
   }
 

@@ -1,9 +1,7 @@
-import dotenv from 'dotenv';
 import { sites } from '../../config/sites.js';
 import { pingSitemap } from './sitemap-ping.js';
 import * as logger from '../utils/logger.js';
-
-dotenv.config();
+import { readEnvByName } from '../config/env.js';
 
 /**
  * Trigger a Vercel deployment via deploy hook.
@@ -13,7 +11,7 @@ export async function triggerDeploy(siteKey: string): Promise<boolean> {
   const site = sites[siteKey];
   if (!site) throw new Error(`Unknown site: ${siteKey}`);
 
-  const hookUrl = process.env[site.vercelHookEnv];
+  const hookUrl = readEnvByName(site.vercelHookEnv);
   if (!hookUrl) {
     logger.warn(`No Vercel deploy hook for ${siteKey} (env: ${site.vercelHookEnv})`);
     return false;
@@ -33,7 +31,7 @@ export async function triggerDeploy(siteKey: string): Promise<boolean> {
       return false;
     }
 
-    const data = await res.json() as { job?: { id?: string } };
+    const data = (await res.json()) as { job?: { id?: string } };
     logger.success(`Vercel deploy triggered for ${siteKey} — job: ${data?.job?.id || 'unknown'}`);
 
     // Ping Google sitemap after successful deploy

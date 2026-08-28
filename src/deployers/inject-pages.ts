@@ -67,13 +67,16 @@ export async function injectPages(siteKey: string, pages: SeoPageRow[]): Promise
   if (!site.dataStrategy) {
     throw new Error(
       `Le site "${siteKey}" n'a pas de stratégie de publication : son contenu n'est pas piloté par le moteur. ` +
-      `Renseigner data_strategy sur /sites, ou le passer en mode CMS.`
+        `Renseigner data_strategy sur /sites, ou le passer en mode CMS.`,
     );
   }
 
   // Les routes du site sont lues une fois par publication : sans elles, un lien
   // vers une page inexistante s'écrit sans que rien ne proteste.
-  routesReelles = lireRoutesDuSite(site, pages.map((p) => p.slug));
+  routesReelles = lireRoutesDuSite(
+    site,
+    pages.map((p) => p.slug),
+  );
 
   switch (site.dataStrategy) {
     case 'data-files':
@@ -83,7 +86,7 @@ export async function injectPages(siteKey: string, pages: SeoPageRow[]): Promise
       if (siteKey === 'restaurant') return injectRestaurantPages(site, pages);
       throw new Error(
         `Aucun écrivain de fichiers pour "${siteKey}" : data_strategy vaut "data-files" mais rien ne sait ` +
-        `écrire dans ${site.serviceDataFile || 'ses fichiers de données'}.`
+          `écrire dans ${site.serviceDataFile || 'ses fichiers de données'}.`,
       );
     case 'config-only':
       return injectCarrosseriePages(site, pages);
@@ -100,8 +103,8 @@ function injectGaragePages(site: SiteConfig, pages: SeoPageRow[]): string[] {
   const injected: string[] = [];
 
   // Split by type
-  const cityHubs = pages.filter(p => p.page_type === 'city');
-  const servicePages = pages.filter(p => p.page_type === 'city_service');
+  const cityHubs = pages.filter((p) => p.page_type === 'city');
+  const servicePages = pages.filter((p) => p.page_type === 'city_service');
 
   // 1. City hubs → data/cities.ts (append new)
   if (cityHubs.length > 0) {
@@ -222,9 +225,11 @@ function fichiersDeDonnees(site: SiteConfig): string[] {
  * casse le build Vercel du garage sur la page FAP le 2026-08-24.
  */
 function normaliserLien<T extends { slug?: string; url?: string; anchor?: string; label?: string }>(
-  lien: T
+  lien: T,
 ): T & { slug: string; anchor: string; label: string } {
-  const slug = String(lien.slug || lien.url || '').trim().replace(/^\/+|\/+$/g, '');
+  const slug = String(lien.slug || lien.url || '')
+    .trim()
+    .replace(/^\/+|\/+$/g, '');
   const texte = lien.anchor || lien.label || slug;
   return { ...lien, slug, anchor: texte, label: texte };
 }
@@ -248,7 +253,7 @@ function liensVivants<T extends { slug: string }>(liens: T[], contexte: string):
 
 /** Map internalLinks label→anchor for garage compatibility */
 function mapLinksToAnchors(
-  links: Array<{ slug?: string; url?: string; label?: string; anchor?: string }>
+  links: Array<{ slug?: string; url?: string; label?: string; anchor?: string }>,
 ): Array<{ slug: string; anchor: string }> {
   return liensVivants(links.map(normaliserLien), 'internalLinks').map((l) => ({
     slug: l.slug,
@@ -269,9 +274,18 @@ function findMatchingBrace(text: string, startIdx: number): number {
 
   for (let i = startIdx; i < text.length; i++) {
     const ch = text[i];
-    if (escape) { escape = false; continue; }
-    if (ch === '\\' && inString) { escape = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
     if (inString) continue;
     if (ch === open) depth++;
     else if (ch === close) {
@@ -300,7 +314,10 @@ function extractTsField(block: string, fieldName: string): string | null {
       // Find closing quote (handle escapes)
       let i = valStart + 1;
       while (i < block.length) {
-        if (block[i] === '\\') { i += 2; continue; }
+        if (block[i] === '\\') {
+          i += 2;
+          continue;
+        }
         if (block[i] === '"') return block.slice(valStart, i + 1);
         i++;
       }
@@ -360,12 +377,20 @@ function mergeGarageServiceEntry(fileContent: string, page: SeoPageRow, c: Recor
   const category = extractTsField(originalBlock, 'category') || '"entretien"';
   const canonical = extractTsField(originalBlock, 'canonical') || JSON.stringify('/' + slug);
   const heroImage = extractTsField(originalBlock, 'heroImage');
-  const educationalTitle = extractTsField(originalBlock, 'educationalTitle') || JSON.stringify((c.seoSections as any)?.[0]?.title || '');
-  const educationalContent = extractTsField(originalBlock, 'educationalContent') || JSON.stringify((c.seoSections as any)?.[0]?.content || '');
+  const educationalTitle =
+    extractTsField(originalBlock, 'educationalTitle') ||
+    JSON.stringify((c.seoSections as any)?.[0]?.title || '');
+  const educationalContent =
+    extractTsField(originalBlock, 'educationalContent') ||
+    JSON.stringify((c.seoSections as any)?.[0]?.content || '');
   const process = extractTsField(originalBlock, 'process') || '[]';
   const brands = extractTsField(originalBlock, 'brands') || '[]';
-  const ctaTitle = extractTsField(originalBlock, 'ctaTitle') || JSON.stringify(`Besoin de ${page.service} à ${page.city} ? Appelez-nous`);
-  const schemaService = extractTsField(originalBlock, 'schemaService') || `{ name: ${JSON.stringify(page.meta_title)}, description: ${JSON.stringify(page.meta_description)} }`;
+  const ctaTitle =
+    extractTsField(originalBlock, 'ctaTitle') ||
+    JSON.stringify(`Besoin de ${page.service} à ${page.city} ? Appelez-nous`);
+  const schemaService =
+    extractTsField(originalBlock, 'schemaService') ||
+    `{ name: ${JSON.stringify(page.meta_title)}, description: ${JSON.stringify(page.meta_description)} }`;
 
   // New SEO content from Supabase
   const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
@@ -428,7 +453,10 @@ function generateGarageServiceEntry(page: SeoPageRow, c: Record<string, unknown>
 
 function generateGarageCityEntry(page: SeoPageRow, c: Record<string, unknown>): string {
   const seoSections = (c.seoSections as Array<{ title: string; content: string }>) || [];
-  const featuredServices = liensVivants((c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [], 'featuredServices');
+  const featuredServices = liensVivants(
+    (c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [],
+    'featuredServices',
+  );
   const highlights = (c.highlights as string[]) || [];
   const nearbyPlaces = (c.nearbyPlaces as string[]) || [];
   const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
@@ -452,10 +480,10 @@ function generateGarageCityEntry(page: SeoPageRow, c: Record<string, unknown>): 
     intro: ${JSON.stringify(c.intro || '')},
     seoSections: ${JSON.stringify(seoSections, null, 6)},
     featuredServices: ${JSON.stringify(
-      featuredServices.slice(0, 5).map(s => ({
+      featuredServices.slice(0, 5).map((s) => ({
         slug: s.slug,
         name: s.name,
-        emoji: "🔧",
+        emoji: '🔧',
       })),
       null,
       6,
@@ -463,7 +491,7 @@ function generateGarageCityEntry(page: SeoPageRow, c: Record<string, unknown>): 
     highlights: ${JSON.stringify(highlights, null, 6)},
     nearbyPlaces: ${JSON.stringify(nearbyPlaces, null, 6)},
     linkedServices: ${JSON.stringify(
-      internalLinks.slice(0, 4).map(l => l.slug),
+      internalLinks.slice(0, 4).map((l) => l.slug),
       null,
       6,
     )},
@@ -548,10 +576,15 @@ function injectVoituresPages(site: SiteConfig, pages: SeoPageRow[]): string[] {
     const faq = (c.faq as Array<{ question: string; answer: string }>) || [];
     const trustSignals = (c.trustSignals as string[]) || [];
     const internalLinks = liensVivants(
-      ((c.internalLinks as Array<{ slug?: string; url?: string; label?: string; anchor?: string }>) || []).map(normaliserLien),
-      'internalLinks'
+      (
+        (c.internalLinks as Array<{ slug?: string; url?: string; label?: string; anchor?: string }>) || []
+      ).map(normaliserLien),
+      'internalLinks',
     );
-    const featuredServices = liensVivants((c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [], 'featuredServices');
+    const featuredServices = liensVivants(
+      (c.featuredServices as Array<{ slug: string; name: string; description?: string }>) || [],
+      'featuredServices',
+    );
 
     const entry = `
   // ── ${page.city || page.slug} (auto-generated) ──────
@@ -630,7 +663,9 @@ function injectCarrosseriePages(site: SiteConfig, pages: SeoPageRow[]): string[]
 
   if (!existingContent) {
     // Create new file
-    writeFileSync(filePath, `// Auto-generated SEO pages for Carrosserie Pro
+    writeFileSync(
+      filePath,
+      `// Auto-generated SEO pages for Carrosserie Pro
 // DO NOT EDIT MANUALLY — managed by seo-automation
 
 export interface GeneratedPage {
@@ -655,10 +690,15 @@ ${newEntries.join(',\n')}
 export function getGeneratedPageBySlug(slug: string): GeneratedPage | undefined {
   return generatedPages.find(p => p.slug === slug);
 }
-`, 'utf-8');
+`,
+      'utf-8',
+    );
   } else {
     // Append to existing array
-    let updated = existingContent.replace(/\n\];\s*\nexport function/, `\n${newEntries.map(e => e + ',').join('\n')}\n];\n\nexport function`);
+    const updated = existingContent.replace(
+      /\n\];\s*\nexport function/,
+      `\n${newEntries.map((e) => e + ',').join('\n')}\n];\n\nexport function`,
+    );
     writeFileSync(filePath, updated, 'utf-8');
   }
 
@@ -678,18 +718,12 @@ function ensureCarrosserieImport(site: SiteConfig) {
 
   // Add import at the top
   const importLine = `import { generatedPages, getGeneratedPageBySlug } from "@/data/generated-pages";\n`;
-  let updated = content.replace(
-    /^(import .+\n)+/m,
-    (match) => match + importLine,
-  );
+  let updated = content.replace(/^(import .+\n)+/m, (match) => match + importLine);
 
   // Add to generateStaticParams
-  updated = updated.replace(
-    /return \[\.\.\.(\w+)\]/,
-    (match, existing) => {
-      return match.replace(']', ', ...generatedPages.map(p => ({ "page-slug": p.slug }))]');
-    },
-  );
+  updated = updated.replace(/return \[\.\.\.(\w+)\]/, (match) => {
+    return match.replace(']', ', ...generatedPages.map(p => ({ "page-slug": p.slug }))]');
+  });
 
   writeFileSync(slugPagePath, updated, 'utf-8');
   logger.info('Updated carrosserie [page-slug]/page.tsx with generated pages import');
@@ -709,7 +743,9 @@ function injectMassagePages(site: SiteConfig, pages: SeoPageRow[]): string[] {
   if (!existsSync(typesDir)) mkdirSync(typesDir, { recursive: true });
   const typesFile = `${typesDir}/massage.ts`;
   if (!existsSync(typesFile)) {
-    writeFileSync(typesFile, `export interface MassageSeoPage {
+    writeFileSync(
+      typesFile,
+      `export interface MassageSeoPage {
   slug: string;
   name: string;
   pageType: 'city' | 'service' | 'city_service';
@@ -725,7 +761,9 @@ function injectMassagePages(site: SiteConfig, pages: SeoPageRow[]): string[] {
   nearbyPlaces?: string[];
   faq: Array<{ question: string; answer: string }>;
 }
-`, 'utf-8');
+`,
+      'utf-8',
+    );
   }
 
   // 3. Build pages data file
@@ -762,7 +800,9 @@ function injectMassagePages(site: SiteConfig, pages: SeoPageRow[]): string[] {
   if (newEntries.length === 0) return [];
 
   if (!existingContent) {
-    writeFileSync(filePath, `// Auto-generated SEO pages for Elaya Rituel
+    writeFileSync(
+      filePath,
+      `// Auto-generated SEO pages for Elaya Rituel
 // DO NOT EDIT MANUALLY — managed by seo-automation
 
 import type { MassageSeoPage } from "@/types/massage";
@@ -774,9 +814,14 @@ ${newEntries.join(',\n')}
 export function getSeoPageBySlug(slug: string): MassageSeoPage | undefined {
   return seoPages.find(p => p.slug === slug);
 }
-`, 'utf-8');
+`,
+      'utf-8',
+    );
   } else {
-    let updated = existingContent.replace(/\n\];\s*\nexport function/, `\n${newEntries.map(e => e + ',').join('\n')}\n];\n\nexport function`);
+    const updated = existingContent.replace(
+      /\n\];\s*\nexport function/,
+      `\n${newEntries.map((e) => e + ',').join('\n')}\n];\n\nexport function`,
+    );
     writeFileSync(filePath, updated, 'utf-8');
   }
 
@@ -795,7 +840,9 @@ function ensureMassageDynamicRoute(site: SiteConfig) {
   if (existsSync(slugPage)) return;
 
   mkdirSync(slugDir, { recursive: true });
-  writeFileSync(slugPage, `import { notFound } from "next/navigation";
+  writeFileSync(
+    slugPage,
+    `import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { seoPages, getSeoPageBySlug } from "@/data/seo-pages";
 import { siteConfig } from "@/lib/config";
@@ -927,7 +974,9 @@ export default async function SeoPage({ params }: { params: Promise<{ slug: stri
     </>
   );
 }
-`, 'utf-8');
+`,
+    'utf-8',
+  );
 
   logger.success('Created [slug]/page.tsx for Elaya Rituel');
 }
@@ -953,20 +1002,14 @@ function injectRestaurantPages(site: SiteConfig, pages: SeoPageRow[]): string[] 
 
       // Try to replace the existing cityPage() call or object for this slug
       // Match cityPage("slug", ...) pattern
-      const cityPageRegex = new RegExp(
-        `cityPage\\("${page.slug}"[^)]*\\),?`,
-        'g'
-      );
+      const cityPageRegex = new RegExp(`cityPage\\("${page.slug}"[^)]*\\),?`, 'g');
       if (cityPageRegex.test(content)) {
         content = content.replace(cityPageRegex, entry + ',');
         injected.push(page.slug);
         logger.info(`Replaced cityPage() for ${page.slug}`);
       } else {
         // Try matching a full object block with this slug
-        const objRegex = new RegExp(
-          `\\{[\\s\\S]*?slug:\\s*"${page.slug}"[\\s\\S]*?\\},`,
-          'g'
-        );
+        const objRegex = new RegExp(`\\{[\\s\\S]*?slug:\\s*"${page.slug}"[\\s\\S]*?\\},`, 'g');
         if (objRegex.test(content)) {
           content = content.replace(objRegex, entry + ',');
           injected.push(page.slug);
@@ -1031,10 +1074,7 @@ function updateSitemap(site: SiteConfig, newSlugs: string[]) {
     // Add to lastmod map if it exists
     if (content.includes('lastModMap')) {
       const entry = `    '/${slug}': '${today}',`;
-      content = content.replace(
-        /const lastModMap = \{/,
-        `const lastModMap = {\n${entry}`,
-      );
+      content = content.replace(/const lastModMap = \{/, `const lastModMap = {\n${entry}`);
     }
   }
 

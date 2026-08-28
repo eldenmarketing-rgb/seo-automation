@@ -1,9 +1,8 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot } from 'grammy';
 import type { BotContext } from '../index.js';
 import { sites } from '../../../config/sites.js';
 import { getSupabase } from '../../db/supabase.js';
 import { readFileSync, writeFileSync } from 'fs';
-import * as logger from '../../utils/logger.js';
 
 export function registerPhoneCommand(bot: Bot<BotContext>) {
   // /phone garage 0612345678
@@ -51,10 +50,8 @@ export function registerPhoneCommand(bot: Bot<BotContext>) {
     }
 
     await ctx.reply(
-      `<b>Mise à jour téléphone</b>\n\n` +
-      `Nouveau: <b>${phoneArg}</b>\n\n` +
-      results.join('\n'),
-      { parse_mode: 'HTML' }
+      `<b>Mise à jour téléphone</b>\n\n` + `Nouveau: <b>${phoneArg}</b>\n\n` + results.join('\n'),
+      { parse_mode: 'HTML' },
     );
   });
 }

@@ -1,30 +1,28 @@
 /**
  * DataForSEO API Client
- * 
+ *
  * Remplace Google Suggest comme source de données SEO.
  * Fournit : volumes de recherche, KD, CPC, mots-clés liés, analyse concurrentielle.
- * 
+ *
  * Endpoints utilisés :
  * - Keywords Data → Google Ads → Search Volume (volumes exacts)
  * - DataForSEO Labs → Keyword Ideas (mots-clés liés)
  * - DataForSEO Labs → Keywords for Site (mots-clés d'un domaine)
  * - DataForSEO Labs → Ranked Keywords (analyse concurrentielle)
- * 
+ *
  * Config : DATAFORSEO_LOGIN + DATAFORSEO_PASSWORD dans .env
  * Pricing : ~0.04$/requête (Search Volume), ~0.01$/requête (Labs)
  * Location France : 2250, Language FR : "fr"
  */
 
-import dotenv from 'dotenv';
 import * as logger from '../utils/logger.js';
 import { withDfsCache } from '../dataforseo/cache.js';
-
-dotenv.config();
+import { env } from '../config/env.js';
 
 // ─── Config ──────────────────────────────────────────────────
 
-const DATAFORSEO_LOGIN = process.env.DATAFORSEO_LOGIN || '';
-const DATAFORSEO_PASSWORD = process.env.DATAFORSEO_PASSWORD || '';
+const DATAFORSEO_LOGIN = env.DATAFORSEO_LOGIN ?? '';
+const DATAFORSEO_PASSWORD = env.DATAFORSEO_PASSWORD ?? '';
 const API_BASE = 'https://api.dataforseo.com/v3';
 
 // France location code for DataForSEO
@@ -33,7 +31,9 @@ const LANGUAGE_CODE_FR = 'fr';
 
 function getAuthHeader(): string {
   if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
-    throw new Error('DataForSEO credentials not configured. Set DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD in .env');
+    throw new Error(
+      'DataForSEO credentials not configured. Set DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD in .env',
+    );
   }
   return 'Basic ' + Buffer.from(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`).toString('base64');
 }
@@ -42,13 +42,13 @@ function getAuthHeader(): string {
 
 export interface KeywordData {
   keyword: string;
-  searchVolume: number;         // Volume mensuel
-  cpc: number | null;           // Coût par clic en €
+  searchVolume: number; // Volume mensuel
+  cpc: number | null; // Coût par clic en €
   competition: 'LOW' | 'MEDIUM' | 'HIGH' | null;
-  competitionIndex: number;     // 0-100
-  keywordDifficulty?: number;   // 0-100 (KD)
-  trend: number[];              // 12 derniers mois
-  intent?: string;              // commercial, informational, navigational, transactional
+  competitionIndex: number; // 0-100
+  keywordDifficulty?: number; // 0-100 (KD)
+  trend: number[]; // 12 derniers mois
+  intent?: string; // commercial, informational, navigational, transactional
 }
 
 export interface KeywordIdea {
@@ -71,7 +71,7 @@ export interface KeywordResearchResult {
   seed: string;
   mainKeyword: KeywordData | null;
   relatedKeywords: KeywordIdea[];
-  totalCost: number;  // Coût de la requête en $
+  totalCost: number; // Coût de la requête en $
 }
 
 // ─── API Caller ──────────────────────────────────────────────
@@ -83,13 +83,13 @@ async function callApi<T>(endpoint: string, body: unknown[], retries = 2): Promi
 
 async function callApiLive<T>(endpoint: string, body: unknown[], retries = 2): Promise<T> {
   let lastError: Error | null = null;
-  
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: {
-          'Authorization': getAuthHeader(),
+          Authorization: getAuthHeader(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
@@ -100,7 +100,7 @@ async function callApiLive<T>(endpoint: string, body: unknown[], retries = 2): P
         throw new Error(`DataForSEO API error ${response.status}: ${text.slice(0, 200)}`);
       }
 
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
 
       if (data.status_code !== 20000) {
         throw new Error(`DataForSEO error: ${data.status_message}`);
@@ -112,11 +112,11 @@ async function callApiLive<T>(endpoint: string, body: unknown[], retries = 2): P
       if (attempt < retries) {
         const delay = 1000 * (attempt + 1);
         logger.warn(`DataForSEO retry ${attempt + 1}/${retries} in ${delay}ms: ${lastError.message}`);
-        await new Promise(r => setTimeout(r, delay));
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
   }
-  
+
   throw lastError!;
 }
 
@@ -125,7 +125,7 @@ async function callApiLive<T>(endpoint: string, body: unknown[], retries = 2): P
 /**
  * Obtenir les volumes de recherche exacts pour une liste de mots-clés.
  * Coût : ~0.04$ par requête (jusqu'à 700 mots-clés par batch).
- * 
+ *
  * @param keywords - Liste de mots-clés (max 700)
  * @returns Map keyword → KeywordData
  */
@@ -139,19 +139,19 @@ export async function getSearchVolume(keywords: string[]): Promise<Map<string, K
   const result = new Map<string, KeywordData>();
 
   try {
-    const data = await callApi<any>('/keywords_data/google_ads/search_volume/live', [{
-      keywords,
-      location_code: LOCATION_CODE_FR,
-      language_code: LANGUAGE_CODE_FR,
-    }]);
+    const data = await callApi<any>('/keywords_data/google_ads/search_volume/live', [
+      {
+        keywords,
+        location_code: LOCATION_CODE_FR,
+        language_code: LANGUAGE_CODE_FR,
+      },
+    ]);
 
     const items = data.tasks?.[0]?.result || [];
     for (const item of items) {
       if (!item.keyword) continue;
-      
-      const trend = (item.monthly_searches || [])
-        .slice(0, 12)
-        .map((m: any) => m.search_volume || 0);
+
+      const trend = (item.monthly_searches || []).slice(0, 12).map((m: any) => m.search_volume || 0);
 
       result.set(item.keyword.toLowerCase(), {
         keyword: item.keyword,
@@ -179,35 +179,34 @@ export async function getSearchVolume(keywords: string[]): Promise<Map<string, K
 /**
  * Obtenir des idées de mots-clés liés à des seeds.
  * Coût : ~0.01$ par requête.
- * 
+ *
  * @param seedKeywords - 1 à 20 mots-clés de départ
  * @param limit - Nombre max de résultats (default 50)
  * @returns Liste de KeywordIdea triée par volume décroissant
  */
-export async function getKeywordIdeas(
-  seedKeywords: string[],
-  limit: number = 50
-): Promise<KeywordIdea[]> {
+export async function getKeywordIdeas(seedKeywords: string[], limit: number = 50): Promise<KeywordIdea[]> {
   if (seedKeywords.length === 0) return [];
   if (seedKeywords.length > 20) seedKeywords = seedKeywords.slice(0, 20);
 
   try {
-    const data = await callApi<any>('/dataforseo_labs/google/keyword_ideas/live', [{
-      keywords: seedKeywords,
-      location_code: LOCATION_CODE_FR,
-      language_code: LANGUAGE_CODE_FR,
-      include_serp_info: true,
-      include_seed_keyword: false,
-      limit,
-      order_by: ['keyword_info.search_volume,desc'],
-      filters: [
-        ['keyword_info.search_volume', '>', 0],
-      ],
-    }]);
+    const data = await callApi<any>('/dataforseo_labs/google/keyword_ideas/live', [
+      {
+        keywords: seedKeywords,
+        location_code: LOCATION_CODE_FR,
+        language_code: LANGUAGE_CODE_FR,
+        include_serp_info: true,
+        include_seed_keyword: false,
+        limit,
+        order_by: ['keyword_info.search_volume,desc'],
+        filters: [['keyword_info.search_volume', '>', 0]],
+      },
+    ]);
 
     const items = data.tasks?.[0]?.result?.[0]?.items || [];
     const cost = data.cost || 0;
-    logger.info(`DataForSEO Keyword Ideas: ${items.length} results for [${seedKeywords.join(', ')}], cost: $${cost.toFixed(4)}`);
+    logger.info(
+      `DataForSEO Keyword Ideas: ${items.length} results for [${seedKeywords.join(', ')}], cost: $${cost.toFixed(4)}`,
+    );
 
     return items.map((item: any) => ({
       keyword: item.keyword,
@@ -232,28 +231,27 @@ export async function getKeywordIdeas(
  * @param seedKeyword - Un mot-clé de départ (pas une liste)
  * @param limit - Nombre max de résultats (default 50)
  */
-export async function getRelatedKeywords(
-  seedKeyword: string,
-  limit: number = 50
-): Promise<KeywordIdea[]> {
+export async function getRelatedKeywords(seedKeyword: string, limit: number = 50): Promise<KeywordIdea[]> {
   if (!seedKeyword) return [];
 
   try {
-    const data = await callApi<any>('/dataforseo_labs/google/related_keywords/live', [{
-      keyword: seedKeyword,
-      location_code: LOCATION_CODE_FR,
-      language_code: LANGUAGE_CODE_FR,
-      include_seed_keyword: true,
-      limit,
-      order_by: ['keyword_data.keyword_info.search_volume,desc'],
-      filters: [
-        ['keyword_data.keyword_info.search_volume', '>', 0],
-      ],
-    }]);
+    const data = await callApi<any>('/dataforseo_labs/google/related_keywords/live', [
+      {
+        keyword: seedKeyword,
+        location_code: LOCATION_CODE_FR,
+        language_code: LANGUAGE_CODE_FR,
+        include_seed_keyword: true,
+        limit,
+        order_by: ['keyword_data.keyword_info.search_volume,desc'],
+        filters: [['keyword_data.keyword_info.search_volume', '>', 0]],
+      },
+    ]);
 
     const items = data.tasks?.[0]?.result?.[0]?.items || [];
     const cost = data.cost || 0;
-    logger.info(`DataForSEO Related Keywords: ${items.length} results for "${seedKeyword}", cost: $${cost.toFixed(4)}`);
+    logger.info(
+      `DataForSEO Related Keywords: ${items.length} results for "${seedKeyword}", cost: $${cost.toFixed(4)}`,
+    );
 
     return items.map((item: any) => ({
       keyword: item.keyword_data?.keyword || '',
@@ -275,26 +273,25 @@ export async function getRelatedKeywords(
  * Utile pour analyser ses propres sites ou les concurrents.
  * Coût : ~0.01$ par requête.
  */
-export async function getKeywordsForSite(
-  domain: string,
-  limit: number = 100
-): Promise<KeywordIdea[]> {
+export async function getKeywordsForSite(domain: string, limit: number = 100): Promise<KeywordIdea[]> {
   try {
-    const data = await callApi<any>('/dataforseo_labs/google/keywords_for_site/live', [{
-      target: domain.replace(/^https?:\/\//, '').replace(/\/$/, ''),
-      location_code: LOCATION_CODE_FR,
-      language_code: LANGUAGE_CODE_FR,
-      include_serp_info: true,
-      limit,
-      order_by: ['keyword_info.search_volume,desc'],
-      filters: [
-        ['keyword_info.search_volume', '>', 0],
-      ],
-    }]);
+    const data = await callApi<any>('/dataforseo_labs/google/keywords_for_site/live', [
+      {
+        target: domain.replace(/^https?:\/\//, '').replace(/\/$/, ''),
+        location_code: LOCATION_CODE_FR,
+        language_code: LANGUAGE_CODE_FR,
+        include_serp_info: true,
+        limit,
+        order_by: ['keyword_info.search_volume,desc'],
+        filters: [['keyword_info.search_volume', '>', 0]],
+      },
+    ]);
 
     const items = data.tasks?.[0]?.result?.[0]?.items || [];
     const cost = data.cost || 0;
-    logger.info(`DataForSEO Keywords for Site: ${items.length} results for ${domain}, cost: $${cost.toFixed(4)}`);
+    logger.info(
+      `DataForSEO Keywords for Site: ${items.length} results for ${domain}, cost: $${cost.toFixed(4)}`,
+    );
 
     return items.map((item: any) => ({
       keyword: item.keyword,
@@ -316,26 +313,25 @@ export async function getKeywordsForSite(
  * = L'équivalent de "Organic Research" dans SEMrush.
  * Coût : ~0.01$ par requête.
  */
-export async function getRankedKeywords(
-  domain: string,
-  limit: number = 100
-): Promise<RankedKeyword[]> {
+export async function getRankedKeywords(domain: string, limit: number = 100): Promise<RankedKeyword[]> {
   try {
-    const data = await callApi<any>('/dataforseo_labs/google/ranked_keywords/live', [{
-      target: domain.replace(/^https?:\/\//, '').replace(/\/$/, ''),
-      location_code: LOCATION_CODE_FR,
-      language_code: LANGUAGE_CODE_FR,
-      load_rank_absolute: true,
-      limit,
-      order_by: ['keyword_data.keyword_info.search_volume,desc'],
-      filters: [
-        ['keyword_data.keyword_info.search_volume', '>', 0],
-      ],
-    }]);
+    const data = await callApi<any>('/dataforseo_labs/google/ranked_keywords/live', [
+      {
+        target: domain.replace(/^https?:\/\//, '').replace(/\/$/, ''),
+        location_code: LOCATION_CODE_FR,
+        language_code: LANGUAGE_CODE_FR,
+        load_rank_absolute: true,
+        limit,
+        order_by: ['keyword_data.keyword_info.search_volume,desc'],
+        filters: [['keyword_data.keyword_info.search_volume', '>', 0]],
+      },
+    ]);
 
     const items = data.tasks?.[0]?.result?.[0]?.items || [];
     const cost = data.cost || 0;
-    logger.info(`DataForSEO Ranked Keywords: ${items.length} results for ${domain}, cost: $${cost.toFixed(4)}`);
+    logger.info(
+      `DataForSEO Ranked Keywords: ${items.length} results for ${domain}, cost: $${cost.toFixed(4)}`,
+    );
 
     return items.map((item: any) => ({
       keyword: item.keyword_data?.keyword || '',
@@ -357,11 +353,8 @@ export async function getRankedKeywords(
  * C'est la fonction appelée par /research dans Grammy.
  * Coût total : ~0.05$ par recherche.
  */
-export async function fullKeywordResearch(
-  seed: string,
-  limit: number = 30
-): Promise<KeywordResearchResult> {
-  let totalCost = 0;
+export async function fullKeywordResearch(seed: string, limit: number = 30): Promise<KeywordResearchResult> {
+  const totalCost = 0;
 
   // 1. Volume exact du seed
   const volumeMap = await getSearchVolume([seed]);
@@ -385,35 +378,33 @@ export async function fullKeywordResearch(
 export async function competitorGapAnalysis(
   ourDomain: string,
   competitorDomains: string[],
-  limit: number = 50
+  limit: number = 50,
 ): Promise<KeywordIdea[]> {
   // 1. Nos mots-clés
   const ourKeywords = await getRankedKeywords(ourDomain, 200);
-  const ourKwSet = new Set(ourKeywords.map(k => k.keyword.toLowerCase()));
+  const ourKwSet = new Set(ourKeywords.map((k) => k.keyword.toLowerCase()));
 
   // 2. Mots-clés des concurrents
   const allGaps: KeywordIdea[] = [];
-  
+
   for (const competitor of competitorDomains.slice(0, 3)) {
     const compKeywords = await getKeywordsForSite(competitor, 100);
-    
+
     // Filtrer ceux qu'on n'a pas
-    const gaps = compKeywords.filter(k => !ourKwSet.has(k.keyword.toLowerCase()));
+    const gaps = compKeywords.filter((k) => !ourKwSet.has(k.keyword.toLowerCase()));
     allGaps.push(...gaps);
   }
 
   // Dédupliquer et trier par volume
   const seen = new Set<string>();
-  const unique = allGaps.filter(k => {
+  const unique = allGaps.filter((k) => {
     const lower = k.keyword.toLowerCase();
     if (seen.has(lower)) return false;
     seen.add(lower);
     return true;
   });
 
-  return unique
-    .sort((a, b) => b.searchVolume - a.searchVolume)
-    .slice(0, limit);
+  return unique.sort((a, b) => b.searchVolume - a.searchVolume).slice(0, limit);
 }
 
 // ─── Scoring enrichi avec DataForSEO ─────────────────────────
@@ -421,7 +412,7 @@ export async function competitorGapAnalysis(
 /**
  * Enrichir le scoring d'une page candidate avec les données DataForSEO.
  * Remplace le scoring heuristique de Google Suggest.
- * 
+ *
  * @returns Score 0-100 basé sur les données réelles
  */
 export async function scoreKeywordWithData(keyword: string): Promise<{
@@ -514,18 +505,26 @@ export async function scoreKeywordWithData(keyword: string): Promise<{
 /**
  * Scorer plusieurs mots-clés en un seul appel API (économique).
  * Utilisé par daily-generate pour scorer toutes les pages candidates.
- * 
+ *
  * @param keywords - Liste de mots-clés à scorer
  * @returns Map keyword → score data
  */
-export async function batchScoreKeywords(keywords: string[]): Promise<Map<string, {
-  score: number;
-  volume: number;
-  kd: number;
-  cpc: number | null;
-  details: string;
-}>> {
-  const result = new Map<string, { score: number; volume: number; kd: number; cpc: number | null; details: string }>();
+export async function batchScoreKeywords(keywords: string[]): Promise<
+  Map<
+    string,
+    {
+      score: number;
+      volume: number;
+      kd: number;
+      cpc: number | null;
+      details: string;
+    }
+  >
+> {
+  const result = new Map<
+    string,
+    { score: number; volume: number; kd: number; cpc: number | null; details: string }
+  >();
 
   if (keywords.length === 0) return result;
 
@@ -627,10 +626,7 @@ export function formatResearchForTelegram(result: KeywordResearchResult): string
 /**
  * Formate l'analyse concurrentielle pour Telegram.
  */
-export function formatGapAnalysisForTelegram(
-  ourDomain: string,
-  gaps: KeywordIdea[]
-): string {
+export function formatGapAnalysisForTelegram(ourDomain: string, gaps: KeywordIdea[]): string {
   const lines: string[] = [];
 
   lines.push(`🎯 <b>Opportunités SEO pour ${ourDomain}</b>`);
@@ -664,11 +660,11 @@ export async function checkBalance(): Promise<{ balance: number; currency: strin
     const response = await fetch(`${API_BASE}/appendix/user_data`, {
       method: 'GET',
       headers: {
-        'Authorization': getAuthHeader(),
+        Authorization: getAuthHeader(),
       },
     });
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
     const money = data.tasks?.[0]?.result?.[0]?.money || {};
 
     return {

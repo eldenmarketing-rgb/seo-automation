@@ -1,0 +1,65 @@
+{
+  "name": "Ideal Transport",
+  "legalName": "Ideal Transport",
+  "category": "Taxi",
+  "subCategories": ["VTC", "Transport de personnes", "Transfert aéroport", "Service de chauffeur"],
+
+  "address": {
+    "street": "2 rue Camp Partere",
+    "city": "Perpignan",
+    "postalCode": "66000",
+    "region": "Occitanie",
+    "department": "Pyrénées-Orientales",
+    "country": "France",
+    "countryCode": "FR"
+  },
+
+  "phone": "07 81 51 19 31",
+  "phoneInternational": "+33781511931",
+  "phoneRaw": "0781511931",
+  "email": "contact@ideal-transport.fr",
+  "website": "https://ideal-transport.fr",
+  "websiteNoProtocol": "ideal-transport.fr",
+
+  "hours": "24h/24 — 7j/7",
+  "hoursStructured": {
+    "monday": "00:00-23:59",
+    "tuesday": "00:00-23:59",
+    "wednesday": "00:00-23:59",
+    "thursday": "00:00-23:59",
+    "friday": "00:00-23:59",
+    "saturday": "00:00-23:59",
+    "sunday": "00:00-23:59"
+  },
+
+  "yearFounded": "2025",
+  "languages": ["Français", "Anglais", "Espagnol"],
+  "paymentMethods": ["Espèces", "Carte bancaire", "Virement"],
+
+  "tagline": "Votre taxi privé à Perpignan — prix fixe, 24h/24.",
+
+  "bio": "Taxi privé Perpignan 24/7 ★ Prix fixe garanti ★ ☎ 07 81 51 19 31",
+
+  "shortDescription": "Taxi privé Perpignan 24h/24. Prix fixe garanti. Aéroports (Perpignan, Girona, Béziers), gare TGV, Côte Vermeille. ★ 4,9/5 — 500+ clients.",
+
+  "mediumDescription": "Ideal Transport est votre service de taxi privé / VTC à Perpignan, disponible 24h/24 et 7j/7. Nous proposons des transferts à prix fixe garanti vers les aéroports de Perpignan-Rivesaltes (PGF), Girona-Costa Brava et Béziers-Cap d'Agde, la gare TGV de Perpignan et toute la Côte Vermeille (Argelès, Collioure, Banyuls, Saint-Cyprien, Canet, Le Barcarès, Leucate). Réservation par téléphone, SMS ou en ligne.",
+
+  "longDescription": "Ideal Transport est un service de taxi privé et VTC basé à Perpignan, dans les Pyrénées-Orientales. Disponibles 24h/24 et 7j/7, nous accompagnons particuliers et professionnels avec des véhicules confortables, climatisés et entretenus.\n\nNos prestations :\n✓ Transferts aéroport : Perpignan-Rivesaltes (PGF), Girona-Costa Brava, Béziers-Cap d'Agde, Toulouse, Barcelone, Marseille\n✓ Trajets gare TGV Perpignan\n✓ Côte Vermeille : Argelès, Collioure, Banyuls, Cerbère\n✓ Stations balnéaires : Saint-Cyprien, Canet-en-Roussillon, Le Barcarès, Leucate\n✓ Longue distance et trajets sur mesure\n\nPrix fixe annoncé à la réservation, suivi de vol gratuit, accueil pancarte inclus. Note moyenne ★ 4,9/5 sur plus de 500 clients.\n\n☎ Réservation : 07 81 51 19 31 — confirmation immédiate.",
+
+  "tags": [
+    "taxi perpignan",
+    "vtc perpignan",
+    "taxi 24h perpignan",
+    "taxi aéroport perpignan",
+    "taxi gare perpignan",
+    "transfert aéroport perpignan",
+    "taxi argeles",
+    "taxi collioure",
+    "taxi saint-cyprien",
+    "taxi canet",
+    "taxi leucate",
+    "taxi banyuls",
+    "vtc 66",
+    "chauffeur privé perpignan"
+  ]
+}

@@ -4,31 +4,60 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "setup-db": "tsx scripts/setup-db.ts",
-    "generate": "tsx src/jobs/daily-generate.ts",
-    "audit": "tsx src/jobs/weekly-gsc-audit.ts",
-    "optimize": "tsx src/jobs/monthly-optimize.ts",
-    "cluster": "tsx src/jobs/weekly-clustering.ts",
-    "run": "tsx scripts/run.ts",
-    "test-telegram": "tsx src/notifications/telegram.ts",
     "bot": "tsx src/bot/index.ts",
-    "backfill-intents": "tsx scripts/backfill-intents.ts",
-    "crawl": "tsx scripts/crawl.ts"
+    "crawl": "tsx scripts/crawl.ts",
+    "gsc-sync": "tsx src/jobs/gsc-sync.ts",
+    "audit": "tsx src/jobs/weekly-gsc-audit.ts",
+    "cluster": "tsx src/jobs/weekly-clustering.ts",
+    "setup-db": "tsx scripts/setup-db.ts",
+    "status": "tsx scripts/run.ts",
+    "test-telegram": "tsx src/notifications/telegram.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "knip": "knip",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run knip",
+    "prepare": "husky"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@supabase/supabase-js": "^2.49.1",
     "cheerio": "^1.2.0",
+    "domhandler": "^6.0.1",
     "dotenv": "^16.4.7",
+    "google-auth-library": "^9.15.1",
     "googleapis": "^146.0.0",
-    "grammy": "^1.41.1",
-    "pg": "^8.20.0",
-    "sharp": "^0.34.5"
+    "grammy": "^1.41.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/node": "^22.13.0",
-    "@types/pg": "^8.18.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "knip": "^5.88.1",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.9.6",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^3.2.7"
+  },
+  "lint-staged": {
+    "*.{ts,mjs,js}": [
+      "eslint --fix --max-warnings=1000",
+      "prettier --write"
+    ],
+    "*.{json,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

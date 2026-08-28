@@ -1,14 +1,12 @@
 import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
 import path from 'path';
-import dotenv from 'dotenv';
 import { sites } from '../../config/sites.js';
 import { getSupabase } from '../db/supabase.js';
 import * as logger from '../utils/logger.js';
+import { env } from '../config/env.js';
 
-dotenv.config();
-
-const SERVICE_ACCOUNT_PATH = process.env.GSC_SERVICE_ACCOUNT_PATH || './config/gsc-service-account.json';
+const SERVICE_ACCOUNT_PATH = env.GSC_SERVICE_ACCOUNT_PATH;
 
 function getAuth() {
   const keyFilePath = path.resolve(SERVICE_ACCOUNT_PATH);
@@ -50,10 +48,7 @@ export interface GscPageRow {
  * Fetch Search Console data for a site over a date range.
  * Returns per-query, per-page performance data.
  */
-export async function fetchGscData(
-  siteKey: string,
-  days = 28,
-): Promise<GscRow[]> {
+export async function fetchGscData(siteKey: string, days = 28): Promise<GscRow[]> {
   const site = sites[siteKey];
   if (!site) throw new Error(`Unknown site: ${siteKey}`);
 
@@ -109,9 +104,9 @@ export async function fetchGscData(
 
   return response.data.rows.map((row) => ({
     site_key: siteKey,
-    date: (row.keys![2] as string),
-    query: (row.keys![0] as string),
-    page_url: (row.keys![1] as string),
+    date: row.keys![2] as string,
+    query: row.keys![0] as string,
+    page_url: row.keys![1] as string,
     position: row.position || 0,
     impressions: row.impressions || 0,
     clicks: row.clicks || 0,
@@ -235,9 +230,7 @@ export async function storeGscPageData(rows: GscPageRow[]): Promise<number> {
 
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500);
-    const { error } = await db
-      .from('gsc_page_daily')
-      .upsert(chunk, { onConflict: 'site_key,date,page_url' });
+    const { error } = await db.from('gsc_page_daily').upsert(chunk, { onConflict: 'site_key,date,page_url' });
 
     if (error) {
       logger.error(`GSC page store error: ${error.message}`);
@@ -297,7 +290,10 @@ export async function syncAllGscData(days = 28): Promise<Record<string, number>>
  * Quick summary: top queries and positions for a site.
  * Used by the Telegram bot /seo command.
  */
-export async function getGscSummary(siteKey: string, days = 28): Promise<{
+export async function getGscSummary(
+  siteKey: string,
+  days = 28,
+): Promise<{
   totalImpressions: number;
   totalClicks: number;
   avgPosition: number;
@@ -309,7 +305,15 @@ export async function getGscSummary(siteKey: string, days = 28): Promise<{
   const rows = await fetchGscData(siteKey, days);
 
   if (rows.length === 0) {
-    return { totalImpressions: 0, totalClicks: 0, avgPosition: 0, topQueries: [], pagesInTop3: 0, pagesInTop10: 0, pages5to15: 0 };
+    return {
+      totalImpressions: 0,
+      totalClicks: 0,
+      avgPosition: 0,
+      topQueries: [],
+      pagesInTop3: 0,
+      pagesInTop10: 0,
+      pages5to15: 0,
+    };
   }
 
   // Aggregate by query
