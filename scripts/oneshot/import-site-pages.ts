@@ -10,8 +10,7 @@
  */
 
 import { existsSync } from 'fs';
-import sharp from 'sharp';
-import { getSupabase } from '../src/db/supabase.js';
+import { getSupabase } from '../../src/db/supabase.js';
 
 interface ImportedPage {
   slug: string;
@@ -48,6 +47,10 @@ async function imageMeta(publicPath: string, projectPath: string) {
   const file = `${projectPath}/public${publicPath}`;
   if (!existsSync(file)) return null;
   try {
+    // `sharp` a quitté les dépendances du dépôt (ménage 2026-08-28) : sans lui,
+    // pas de dimensions — acceptable pour un site qui rend ses images en `fill`.
+    const sharp = (await import('sharp').catch(() => null))?.default;
+    if (!sharp) return null;
     const { width, height } = await sharp(file).metadata();
     return { width, height };
   } catch {
@@ -128,8 +131,66 @@ async function importCarrosserie(): Promise<ImportedPage[]> {
   return pages;
 }
 
+// ─── Elaya Rituel ───────────────────────────────────────────────────────
+
+/**
+ * Les trois piliers gardent leur forme typée (`content.pillar`, voir
+ * `lib/content/_types.ts` du site) : le gabarit reste identique après la
+ * bascule. Le dashboard édite h1, title, description, FAQ et image hero ;
+ * `content.faq` et `content.heroImage` sont donc aussi posés à plat, et la
+ * page les préfère au pilier quand ils existent.
+ */
+async function importElayarituel(): Promise<ImportedPage[]> {
+  const projectPath = '/home/ubuntu/sites/Elayarituel';
+  const { pillars } = (await import(`${projectPath}/lib/content/index.ts`)) as {
+    pillars: Record<string, Record<string, unknown>>;
+  };
+  const { services, siteConfig } = (await import(`${projectPath}/lib/config.ts`)) as {
+    services: Array<{ slug: string; title: string }>;
+    siteConfig: { name: string };
+  };
+
+  const pages: ImportedPage[] = [];
+  for (const service of services) {
+    const pillar = pillars[service.slug];
+    if (!pillar) {
+      console.log(`  (ignoré) ${service.slug} : pas de pilier dans lib/content`);
+      continue;
+    }
+    const hero = pillar.heroImage as { src: string; alt: string; position?: string };
+    const meta = await imageMeta(hero.src, projectPath);
+    const faq = (pillar.faq as Array<{ q: string; a: string }>).map((f) => ({ question: f.q, answer: f.a }));
+    const lead = pillar.lead as string[];
+
+    pages.push({
+      slug: `prestations/${service.slug}`,
+      page_type: 'city_service',
+      city: 'Perpignan',
+      service: service.title,
+      // Le site sert le title en absolu depuis le CMS : on stocke la forme complète,
+      // identique à ce que le gabarit « %s | Elaya Rituel » du layout produisait.
+      meta_title: `${pillar.metaTitle as string} | ${siteConfig.name}`,
+      meta_description: pillar.metaDescription as string,
+      h1: `${service.title} à domicile à Perpignan`,
+      content: {
+        pillar,
+        heroImage: { src: hero.src, alt: hero.alt, position: hero.position, ...(meta || {}) },
+        intro: lead.join('\n\n'),
+        seoSections: [],
+        faq,
+        highlights: [],
+        trustSignals: [],
+        internalLinks: [],
+        gallery: [],
+      },
+    });
+  }
+  return pages;
+}
+
 const IMPORTERS: Record<string, () => Promise<ImportedPage[]>> = {
   carrosserie: importCarrosserie,
+  elayarituel: importElayarituel,
 };
 
 // ─── Exécution ──────────────────────────────────────────────────────────
@@ -146,7 +207,7 @@ async function main() {
 
   const { data: existing } = await db
     .from('seo_pages')
-    .select('id, slug, status')
+    .select('id, slug, status, content')
     .eq('site_key', siteKey);
 
   const bySlug = new Map((existing || []).map((p) => [p.slug, p]));
@@ -187,6 +248,8 @@ async function main() {
 
   for (const p of pages) {
     const found = bySlug.get(p.slug);
+    // Le profil de score choisi dans le dashboard survit au ré-import.
+    const profile = (found?.content as Record<string, unknown> | null)?.profile;
     const row = {
       site_key: siteKey,
       slug: p.slug,
@@ -196,7 +259,7 @@ async function main() {
       meta_title: p.meta_title,
       meta_description: p.meta_description,
       h1: p.h1,
-      content: p.content,
+      content: profile ? { profile, ...p.content } : p.content,
       status: 'published',
       updated_at: new Date().toISOString(),
     };
