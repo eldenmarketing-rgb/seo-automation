@@ -20,7 +20,13 @@ import { buildGraph } from './graph.js';
 import { computeFunnelStage } from './funnel.js';
 import { detectIssues } from './issues.js';
 import { isOutOfScope } from './scope.js';
-import { normalizeUrl, type CrawlRow, type ExpectedState, type SiteCrawlResult } from './types.js';
+import {
+  normalizeUrl,
+  type CrawlRow,
+  type ExpectedState,
+  type SiteChecks,
+  type SiteCrawlResult,
+} from './types.js';
 import * as logger from '../utils/logger.js';
 
 export interface CrawlOptions {
@@ -83,27 +89,33 @@ function locsOf(xml: string): string[] {
 async function sitemapUrls(
   origin: string,
   declared: string[],
-): Promise<{ urls: Set<string>; error?: string }> {
-  const candidates = [...new Set([...declared, `${origin}/sitemap.xml`])];
+): Promise<{ urls: Set<string>; error?: string; status: number; sources: string[] }> {
+  const canonical = `${origin}/sitemap.xml`;
+  const candidates = [...new Set([...declared, canonical])];
   const urls = new Set<string>();
-  let reached = false;
+  const sources: string[] = [];
+  let status = 0;
 
   for (const candidate of candidates) {
-    const { status, body } = await fetchText(candidate);
-    if (status !== 200) continue;
-    reached = true;
+    const res = await fetchText(candidate);
+    if (candidate === canonical) status = res.status;
+    if (res.status !== 200) continue;
+    sources.push(candidate);
 
-    if (/<sitemapindex/i.test(body)) {
-      for (const child of locsOf(body)) {
+    if (/<sitemapindex/i.test(res.body)) {
+      for (const child of locsOf(res.body)) {
         const sub = await fetchText(child);
-        if (sub.status === 200) for (const u of locsOf(sub.body)) urls.add(u);
+        if (sub.status !== 200) continue;
+        sources.push(child);
+        for (const u of locsOf(sub.body)) urls.add(u);
       }
     } else {
-      for (const u of locsOf(body)) urls.add(u);
+      for (const u of locsOf(res.body)) urls.add(u);
     }
   }
 
-  return reached ? { urls } : { urls, error: 'aucun sitemap joignable' };
+  const reached = sources.length > 0;
+  return { urls, status, sources, ...(reached ? {} : { error: 'aucun sitemap joignable' }) };
 }
 
 /**
@@ -197,8 +209,20 @@ export async function crawlSite(
 
   // ─── Ce que le site déclare ──────────────────────────────────────────────
   const robots = await loadRobots(origin);
-  const { urls: sitemap, error: sitemapError } = await sitemapUrls(origin, robots.sitemaps);
+  const sm = await sitemapUrls(origin, robots.sitemaps);
+  const { urls: sitemap, error: sitemapError } = sm;
   const sitemapKeys = new Set([...sitemap].map(normalizeUrl));
+  const checks: SiteChecks = {
+    robots: {
+      status: robots.status,
+      fetched: robots.fetched,
+      group: robots.group,
+      rules: robots.rules.length,
+      sitemaps: robots.sitemaps,
+      body: robots.body,
+    },
+    sitemap: { status: sm.status, reached: sm.sources.length > 0, sources: sm.sources, urls: [...sitemap] },
+  };
 
   // ─── File de crawl ───────────────────────────────────────────────────────
   const queue: string[] = [];
@@ -429,6 +453,7 @@ export async function crawlSite(
     rows: crawled.map((c) => c.row),
     property,
     sitemapError,
+    checks,
     alignements,
   };
 }

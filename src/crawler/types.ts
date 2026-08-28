@@ -60,12 +60,35 @@ export interface CrawlRow {
   fetchError?: string;
 }
 
+/**
+ * Ce que le site déclare à Google — des faits de niveau site, pas d'URL.
+ * Écrits dans `crawl_site_checks` à chaque passage.
+ */
+export interface SiteChecks {
+  robots: {
+    status: number;
+    fetched: boolean;
+    group: 'googlebot' | '*' | null;
+    rules: number;
+    sitemaps: string[];
+    body: string;
+  };
+  sitemap: {
+    /** HTTP de /sitemap.xml, même si un autre sitemap déclaré a été lu. */
+    status: number;
+    reached: boolean;
+    sources: string[];
+    urls: string[];
+  };
+}
+
 export interface SiteCrawlResult {
   siteKey: string;
   domain: string;
   rows: CrawlRow[];
   property: string | null;
   sitemapError?: string;
+  checks: SiteChecks;
   /** Statuts de `seo_pages` que la réalité constatée dément (voir index.ts). */
   alignements: Array<{ page_id: string; url: string; de: string; vers: string; preuve: string }>;
 }

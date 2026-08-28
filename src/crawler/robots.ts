@@ -15,9 +15,17 @@ interface Rule {
 
 export interface Robots {
   fetched: boolean;
+  /** HTTP de /robots.txt — 0 si injoignable. */
+  status: number;
+  /** Groupe retenu : Googlebot s'il existe, sinon `*`, sinon aucun. */
+  group: 'googlebot' | '*' | null;
   rules: Rule[];
   sitemaps: string[];
+  /** Le fichier tel que servi, tronqué — pour l'afficher, pas pour le relire. */
+  body: string;
 }
+
+const BODY_MAX = 4096;
 
 function parse(body: string): { groups: Map<string, Rule[]>; sitemaps: string[] } {
   const groups = new Map<string, Rule[]>();
@@ -73,13 +81,14 @@ function toRegex(pattern: string): RegExp {
 
 export async function loadRobots(origin: string): Promise<Robots> {
   const { status, body } = await fetchText(`${origin}/robots.txt`);
-  if (status !== 200) return { fetched: false, rules: [], sitemaps: [] };
+  if (status !== 200) return { fetched: false, status, group: null, rules: [], sitemaps: [], body: '' };
 
   const { groups, sitemaps } = parse(body);
   // Le groupe Googlebot prime sur le générique : c'est lui qui décide de
   // l'indexation, et c'est la seule opinion qui nous intéresse.
-  const rules = groups.get('googlebot') ?? groups.get('*') ?? [];
-  return { fetched: true, rules, sitemaps };
+  const group = groups.has('googlebot') ? 'googlebot' : groups.has('*') ? '*' : null;
+  const rules = group ? (groups.get(group) ?? []) : [];
+  return { fetched: true, status, group, rules, sitemaps, body: body.slice(0, BODY_MAX) };
 }
 
 /** Motif le plus long gagnant ; à égalité, Allow gagne (règle Google). */

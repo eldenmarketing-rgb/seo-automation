@@ -12,6 +12,7 @@
                                                       └────────┬─────────┘
  Sites en ligne ─┐  crawl lundi                                │ lecture
  (HTTP, sitemap) ├─► scripts/crawl.ts ─► src/crawler ─► crawl_results (v_crawl_latest)
+                 │                              └─► crawl_site_checks (robots.txt, sitemap)
  GSC Inspection ─┘                                             │
                                                                ▼
                                               seo-dashboard (Next.js, même Supabase)
@@ -39,7 +40,7 @@ Trois principes structurent tout :
 | Entrée                          | Déclencheur                         | Écrit dans                                                    |
 | ------------------------------- | ----------------------------------- | ------------------------------------------------------------- |
 | `src/jobs/gsc-sync.ts`          | cron 6h30 · bouton « Synchroniser » | `gsc_positions`, `gsc_page_daily`, `automation_logs`          |
-| `scripts/crawl.ts --apply`      | cron lundi 6h45                     | `crawl_results`, alignements `seo_pages.status`               |
+| `scripts/crawl.ts --apply`      | cron lundi 6h45                     | `crawl_results`, `crawl_site_checks`, alignements `seo_pages` |
 | `src/jobs/weekly-gsc-audit.ts`  | cron lundi 8h                       | `optimization_queue`, Telegram                                |
 | `src/jobs/weekly-clustering.ts` | cron dimanche 22h                   | `keyword_clusters`                                            |
 | `scripts/publish-pages.ts`      | dashboard `lib/publish.ts`          | sites (CMS) + `seo_pages`                                     |
@@ -93,7 +94,7 @@ n'est jamais rachetée).
 
 `site_profiles` (registre) · `seo_pages` (journal CMS + inventaire `external`) · `gsc_positions`
 / `gsc_page_daily` (historique GSC, jamais écrasé) · `crawl_results` → `v_crawl_latest` (dernier
-passage) · `opportunities` (backlog d'actions) · `seo_measurements` (baseline / J+7 / J+28 / J+60
+passage) · `crawl_site_checks` → `v_crawl_site_checks_latest` (robots.txt + sitemap par site) · `opportunities` (backlog d'actions) · `seo_measurements` (baseline / J+7 / J+28 / J+60
 / J+90) · `automation_logs` (chaque job, chaque déclencheur) · `dataforseo_cache`.
 
 ## 5. Ce qui n'est plus là (et pourquoi)

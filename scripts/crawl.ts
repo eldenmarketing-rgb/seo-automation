@@ -93,6 +93,14 @@ async function main() {
       `${pad(site.site_key, 14)} ${result.domain}` +
         (result.property ? `  ·  ${result.property}` : '  ·  pas de propriété GSC'),
     );
+
+    // Ce que le site déclare : deux faits sans URL, donc invisibles du funnel.
+    // Un robots.txt disparu n'y produit aucune anomalie (absent = tout autorisé).
+    const ck = result.checks;
+    console.log(
+      `   robots.txt ${ck.robots.fetched ? `OK (${ck.robots.rules} règle(s) ${ck.robots.group ?? ''}, ${ck.robots.sitemaps.length} sitemap déclaré)` : `⚠ HTTP ${ck.robots.status}`}` +
+        ` · sitemap ${ck.sitemap.reached ? `OK (${ck.sitemap.urls.length} URL, ${ck.sitemap.sources.length} fichier(s))` : `⚠ HTTP ${ck.sitemap.status}`}`,
+    );
     console.log(
       `   ${rows.length} URL crawlées en ${Math.round((Date.now() - started) / 1000)} s · ` +
         `${indexables.length} censées être indexées · ${byState('redirected').length} redirigées · ` +
@@ -161,6 +169,22 @@ async function main() {
         if (logErr) console.log(`     ⚠ journal : ${logErr.message}`);
         console.log(`   ✅ ${result.alignements.length} statut(s) corrigé(s) dans seo_pages`);
       }
+
+      const { error: ckErr } = await db.from('crawl_site_checks').insert({
+        run_id: runId,
+        site_key: site.site_key,
+        robots_status: ck.robots.status,
+        robots_fetched: ck.robots.fetched,
+        robots_group: ck.robots.group,
+        robots_rules: ck.robots.rules,
+        robots_sitemaps: ck.robots.sitemaps,
+        robots_body: ck.robots.body || null,
+        sitemap_status: ck.sitemap.status,
+        sitemap_reached: ck.sitemap.reached,
+        sitemap_sources: ck.sitemap.sources,
+        sitemap_urls: ck.sitemap.urls,
+      });
+      if (ckErr) throw new Error(`Écriture des vérifications site ${site.site_key} : ${ckErr.message}`);
 
       const payload = rows.map(({ impressions28: _i, fetchError: _f, ...row }) => ({
         ...row,

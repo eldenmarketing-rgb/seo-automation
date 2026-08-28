@@ -97,6 +97,14 @@ qui ne l'atteignent pas), chaque anomalie filtre, et chaque URL affiche l'action
 qui la concerne. Les compteurs restent toujours ceux du réseau entier : filtrer change la liste, jamais
 le diagnostic. Libellés d'étapes et d'anomalies dupliqués dans `src/lib/indexation.ts` (dashboard) —
 tenir à jour avec `src/crawler/types.ts` et `src/crawler/issues.ts`.
+**Robots.txt et sitemap par site (2026-08-28)** : le crawler écrit aussi `crawl_site_checks` (HTTP du
+`/robots.txt`, groupe et règles retenus, sitemaps déclarés, corps du fichier ; HTTP du `/sitemap.xml`,
+fichiers lus, URL déclarées). `buildSiteTech` (dashboard `src/lib/indexation.ts`) en fait un voyant par
+site — rouge si le sitemap est injoignable ou vide, ambre si le robots.txt manque, ne déclare pas de
+sitemap, ou si des URL déclarées cassent/redirigent/manquent — affiché sur `/indexation` (bandeau
+d'alerte + chips par site + sitemap dépliable avec le HTTP de chaque URL + robots.txt visible), sur
+`/sites` (liste) et sur `/pages/[id]` (carte **Indexation** : HTTP, robots, noindex, sitemap, étape).
+C'est le filet de la bascule CMS : un robots.txt disparu ne produit aucune anomalie par URL.
 
 ### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
 **Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
@@ -206,6 +214,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 | site_profiles | **Registre des sites — source unique de vérité** | site_key, is_active, name/label/color, domain, gsc_domain, phone/email/adresse, schema_type, scope, **mode (local/thematic/product)**, niche, triage_instructions, delivery_mode + revalidate_url/secret, project_path & fichiers cibles, vercel_hook_env, services (JSONB), seo_keyword_patterns, brand, enabled_intents, content_rules, cocooning |
 | gsc_positions | Données Search Console | site_key, query, page_url, position, clicks, impressions, ctr |
 | crawl_results | **Faits par URL + funnel d'indexation** (B2) — une ligne par URL et par passage, lire via `v_crawl_latest` (= **le dernier passage du site**, pas le dernier état connu de chaque URL : une URL sortie du périmètre sort du diagnostic) | site_key, url, page_id, expected_state (indexable/redirected/draft/out_of_scope), http_status, redirect_chain, indexable, canonical, in_sitemap, links_in/out, click_depth, content_hash, gsc_verdict/coverage_state/last_crawl, funnel_stage, issues[] |
+| crawl_site_checks | **Ce que le site déclare** — robots.txt et sitemap, une ligne par site et par passage, lire via `v_crawl_site_checks_latest` | site_key, run_id, robots_status/fetched/group/rules/sitemaps/body, sitemap_status/reached/sources/urls[] |
 | optimization_queue | File d'optimisation | page_id, priority, status |
 | automation_logs | Logs des jobs | **job_name**, **action**, site_key, details (JSONB), status, duration_ms |
 | bot_settings | Config par site | site_key, phone, address, horaires (JSONB), promo_text, gbp_link |
@@ -227,7 +236,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 
 ```
 30 6 * * *   Sync GSC → gsc_positions (QUOTIDIEN, en tête de chaîne le lundi) — src/jobs/gsc-sync.ts --trigger=cron
-45 6 * * 1   Crawl + funnel d'indexation → crawl_results — scripts/crawl.ts --apply (~1 min/site)
+45 6 * * 1   Crawl + funnel d'indexation → crawl_results + crawl_site_checks — scripts/crawl.ts --apply (~1 min/site)
 30 7 * * 1   Scan backlog SEO — détecteurs + mesures (curl POST /api/backlog/scan sur le dashboard pm2)
 0 8 * * 1    Audit GSC hebdomadaire (lundi)
 0 22 * * 0   Clustering keywords hebdomadaire (dimanche)
