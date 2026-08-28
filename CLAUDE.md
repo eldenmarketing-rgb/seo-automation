@@ -61,6 +61,8 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 
 **Repo :** `/home/ubuntu/sites/seo-dashboard` (Next.js, même base Supabase)
 **Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`)
+**Filet qualité (2026-08-28) :** même dispositif que ce dépôt — `npm run check` (typecheck + lint + format:check),
+husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`.
 
 ### Pages
 `/` (plan d'action), `/backlog`, `/gsc`, `/indexation`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/sites`.

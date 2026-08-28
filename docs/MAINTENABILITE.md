@@ -89,7 +89,7 @@ avant la suivante et commitée séparément.
 - [x] Logger : niveau `debug` + variable `LOG_LEVEL`.
 
 ### Phase 4 — Formatage
-- [ ] Un commit Prettier sur tout le dépôt, référencé dans `.git-blame-ignore-revs` (blame propre).
+- [x] Un commit Prettier sur tout le dépôt, référencé dans `.git-blame-ignore-revs` (blame propre).
 
 ### Phase 5 — Documentation
 - [x] `README.md` (installation, variables, scripts, structure, workflow qualité) — il n'y en avait pas.
@@ -99,8 +99,8 @@ avant la suivante et commitée séparément.
 - [x] `CLAUDE.md` mis à jour (scripts, structure, commandes bot).
 
 ### Phase 6 — Dashboard (même filet, plus léger)
-- [ ] Corriger `tsc` (2) et ESLint (11).
-- [ ] `typecheck`/`check` npm, husky + lint-staged, hooks Claude Code, CI.
+- [x] Corriger `tsc` (2) et ESLint (11) — et les 10 avertissements.
+- [x] `typecheck`/`check` npm, husky + lint-staged, hooks Claude Code, CI, `.env.example`, README réel.
 
 ### Vérification finale
 - `npm run check` vert (typecheck + lint + format + tests + knip).
@@ -134,7 +134,24 @@ module d'entrée OK ; `npm run status` OK ; `gsc-sync --site=vtc` 644 lignes en 
 --site=vtc` 42 URL en simulation ; `publish-pages` et `serp-analyze` répondent ; `seo-bot`
 redémarré sous pm2.
 
-**Reste** : Phase 4 (commit Prettier isolé + `.git-blame-ignore-revs`, à faire au moment du commit),
-Phase 6 (dashboard : 2 erreurs tsc, 11 ESLint, même filet). Les 21 exports inutilisés
-(`dataforseo.ts`, `intent-classifier.ts`, `registry.ts`…) sont du code hérité à élaguer au fil
-de l'eau, pas un blocage.
+**2026-08-28, 20 h 30** — Phase 4 : commits `1339dbe` (chantier), `5688499` (Prettier seul),
+`de944e8` (`.git-blame-ignore-revs`), poussés sur `cms-supabase`, CI verte au premier passage.
+
+**2026-08-28, soir** — Phase 6, dépôt `seo-dashboard` (commits `b2cbed4` chantier, `490b23e`
+Prettier seul, `9ecc6d6` blame-ignore). Les 2 erreurs tsc venaient d'un `.next/dev/types/validator.ts`
+d'avril qui citait `/cannibalization` et `/pipeline`, devenues des redirections — cache `next dev`
+périmé, supprimé ; `typecheck` = `next typegen && tsc --noEmit`. Les 11 erreurs ESLint : cinq
+`withDfsCache<any>` remplacés par un `DfsResponse<Result>` partagé (`src/lib/dfs-cache.ts`), cinq
+guillemets non échappés passés en typographie française, et un `setState` dans l'effet de
+`/indexation` remplacé par un état dérivé (« la requête à laquelle `data` répond »), ce qui règle
+aussi la course entre deux filtres successifs. Les 10 avertissements sont tombés avec : paramètres
+et variables morts (`villeCible`, `_provider`, `slugifie`, `fetchSites`), `repaired` désormais
+renvoyé par `/api/generate`, bouton de re-tri désactivé pendant le re-tri. Même filet que ici,
+sans tests ni knip : `check` = typecheck + lint + format:check ; pre-commit secrets + lint-staged,
+pre-push typecheck, hooks Claude Code identiques, CI GitHub. Vérifié : `npm run check` vert, faux
+token refusé au commit, `next build` OK, `seo-dashboard` redémarré sous pm2 et routes API en 200.
+
+**Reste** : les 21 exports inutilisés de ce dépôt (`dataforseo.ts`, `intent-classifier.ts`,
+`registry.ts`…) sont du code hérité à élaguer au fil de l'eau, pas un blocage. Le dashboard n'a
+toujours pas de test : en ajouter sur `src/lib/` (détecteurs, `page-types`, `paging`) quand on y
+retouche.
