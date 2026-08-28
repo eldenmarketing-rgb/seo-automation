@@ -6,9 +6,14 @@
  * Aucun appel IA — collecte pure.
  *
  * Usage :
- *   npx tsx src/jobs/gsc-sync.ts                → 28 derniers jours (cron lundi 7:00)
- *   npx tsx src/jobs/gsc-sync.ts --backfill     → 16 mois, par tranches mensuelles
- *   npx tsx src/jobs/gsc-sync.ts --site=vtc     → un seul site
+ *   npx tsx src/jobs/gsc-sync.ts                    → 28 derniers jours (cron quotidien 6:30)
+ *   npx tsx src/jobs/gsc-sync.ts --backfill         → 16 mois, par tranches mensuelles
+ *   npx tsx src/jobs/gsc-sync.ts --site=vtc         → un seul site
+ *   npx tsx src/jobs/gsc-sync.ts --trigger=dashboard → tracé dans automation_logs (cron par défaut : cli)
+ *
+ * Google livre ses chiffres avec ~3 jours de retard : une synchro lancée le
+ * vendredi 28 s'arrête au 25. Relancer plusieurs fois le même jour ne change
+ * rien (upsert), ce n'est jamais dangereux.
  *
  * Les propriétés sont auto-découvertes via sites.list() puis mappées vers un
  * site_key par config/gsc-sites.ts. Une propriété non mappée ou un site sans
@@ -29,6 +34,8 @@ const GSC_DELAY_DAYS = 3; // les données GSC ont ~3 jours de retard
 const args = process.argv.slice(2);
 const backfill = args.includes('--backfill');
 const onlySite = args.find((a) => a.startsWith('--site='))?.split('=')[1];
+const trigger = args.find((a) => a.startsWith('--trigger='))?.split('=')[1] || 'cli';
+const action = backfill ? 'backfill' : 'sync';
 
 const fmt = (d: Date) => d.toISOString().split('T')[0];
 
@@ -113,9 +120,11 @@ async function run() {
   }
 
   const durationMs = Date.now() - startTime;
-  await log('gsc-sync', backfill ? 'backfill' : 'weekly-sync', hadError ? 'warning' : 'success', undefined, {
+  await log('gsc-sync', action, hadError ? 'warning' : 'success', undefined, {
     period: { start: fmt(start), end: fmt(end) },
     rows_by_site: results,
+    trigger,
+    only_site: onlySite ?? null,
   }, durationMs);
 
   logger.success(`GSC sync terminé en ${Math.round(durationMs / 1000)}s`);
@@ -123,6 +132,6 @@ async function run() {
 
 run().catch(async (e) => {
   logger.error(`GSC sync fatal: ${e.message}`);
-  await log('gsc-sync', backfill ? 'backfill' : 'weekly-sync', 'error', undefined, { error: e.message }).catch(() => {});
+  await log('gsc-sync', action, 'error', undefined, { error: e.message, trigger }).catch(() => {});
   process.exit(1);
 });

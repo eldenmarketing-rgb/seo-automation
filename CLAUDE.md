@@ -63,10 +63,26 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 **Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`)
 
 ### Pages
-`/` (overview), `/backlog`, `/indexation`, `/gsc`, `/keywords`, `/pages`, `/clusters`, `/cannibalization`, `/pipeline`, `/backlinks`, `/sites`
+`/` (plan d'action), `/backlog`, `/gsc`, `/indexation`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/sites`.
+`/pipeline` et `/cannibalization` redirigent en 308 vers les onglets de `/pages` (`next.config.ts`).
+
+### Navigation, périmètre, pagination (2026-08-28)
+- **Nav latérale par étape du workflow** (`src/components/Nav.tsx`) : Décider (Plan, Backlog) · Constater (Search
+  Console, Indexation) · Produire (Mots-clés, Clusters, Pages) · Autorité (Backlinks) · Réglages (Sites).
+- **Périmètre site global** (`src/lib/site-scope.tsx`, `useSiteScope()`) : un seul filtre dans la colonne de gauche,
+  porté par `?site=` dans l'URL (lien partageable), propagé par la nav, mémorisé en `localStorage`. Les écrans ne
+  posent plus leur propre filtre ; GSC et Backlinks, qui ne savent pas additionner les sites, prennent le premier
+  site actif quand le périmètre est « tous ».
+- **Pagination serveur** (`src/lib/paging.ts` côté API, `src/components/Pagination.tsx` côté écran) sur
+  `/api/keywords`, `/api/clusters`, `/api/pages`, `/api/backlog` : `?page=&per=` (per ≤ 500), réponse
+  `{ …, total, page, per }` avec COUNT exact — l'ancien `.limit(500)` cachait 21 000 mots-clés sans le dire.
+  Une page hors bornes (PGRST103) est rabattue sur la page 1 et la réponse fait foi (`page` renvoyé).
+  `idsOnly=1` sur `/api/clusters` reste non paginé (tri par lots).
+- **Vue par défaut = ce qui attend une décision** : Mots-clés `status=new` (onglets avec compteurs),
+  Clusters `new`, Pages `status=todo` (draft + brief_ready + error ; `all` = tout sauf 301), Backlog `new`.
 
 ### API routes
-`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST), `/api/keywords`, `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`
+`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/gsc` (+ `sync` POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`
 
 ### Module Backlog SEO (meilleure prochaine action, multi-sites)
 Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
@@ -97,6 +113,14 @@ Une hypothèse ne doit jamais devancer une demande prouvée — impact calculé 
 première page**, confiance plafonnée (0,35 max, 0,15 si `kd` vaut 0 = difficulté non calculée),
 5 propositions par site. DataForSEO sert donc à trois choses : lancer un site neuf, chiffrer une
 candidate (volume + KD affichés sur les CREATE_PAGE, sans appel API), et les backlinks.
+
+### Page Search Console (`/gsc`)
+Fenêtre glissante bornée sur la dernière date en base (Google livre à J-3) : **28 j / 3 / 6 / 12 mois / Tout**,
+comparée à la période précédente ou **à la même période un an plus tôt** (saisonnalité garage/restaurant).
+L'état est dans l'URL (`?site=&view=&period=&compare=`). Bouton **Synchroniser** = `POST /api/gsc/sync`, qui
+lance `src/jobs/gsc-sync.ts --trigger=dashboard` (un seul passage à la fois, ~8 s) ; le pied de page affiche
+la vraie dernière synchro lue dans `automation_logs` (job `gsc-sync`). Une référence tronquée par l'historique
+est signalée, jamais tue. Les totaux viennent toujours de `gsc_page_daily` ; le détail par requête reste partiel.
 
 ### Module Backlinks (autorité off-page)
 Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
@@ -172,7 +196,7 @@ npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — 
 ## Jobs Cron Automatisés
 
 ```
-30 6 * * 1   Sync GSC → gsc_positions (lundi, en tête de chaîne) — src/jobs/gsc-sync.ts
+30 6 * * *   Sync GSC → gsc_positions (QUOTIDIEN, en tête de chaîne le lundi) — src/jobs/gsc-sync.ts --trigger=cron
 45 6 * * 1   Crawl + funnel d'indexation → crawl_results — scripts/crawl.ts --apply (~1 min/site)
 30 7 * * 1   Scan backlog SEO — détecteurs + mesures (curl POST /api/backlog/scan sur le dashboard pm2)
 0 8 * * 1    Audit GSC hebdomadaire (lundi)

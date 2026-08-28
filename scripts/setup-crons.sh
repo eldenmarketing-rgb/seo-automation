@@ -30,8 +30,9 @@ cat >> /tmp/crontab_clean << EOF
 # ── SEO Automation System ─────────────────────────────── $MARKER
 # daily-generate DÉSACTIVÉ — génération human-in-the-loop via le dashboard $MARKER
 
-# Weekly GSC sync → gsc_positions (Monday 6:30 AM, en tête de chaîne) $MARKER
-30 6 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gsc-sync.ts >> $LOG_FILE 2>&1 $MARKER
+# Daily GSC sync → gsc_positions (6:30 AM tous les jours, en tête de chaîne le lundi) $MARKER
+# 8 s pour 9 sites, upsert idempotent : le dashboard travaille sur J-3 au lieu de J-3 à J-9. $MARKER
+30 6 * * * cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gsc-sync.ts --trigger=cron >> $LOG_FILE 2>&1 $MARKER
 
 # Weekly crawl + funnel d'indexation → crawl_results (Monday 6:45 AM) $MARKER
 # Sans lui, les détecteurs du backlog raisonnent sur un crawl figé : une page $MARKER
