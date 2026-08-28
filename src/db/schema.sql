@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS seo_pages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   site_key TEXT NOT NULL,
-  page_type TEXT NOT NULL CHECK (page_type IN ('city', 'service', 'city_service')),
+  page_type TEXT NOT NULL CHECK (page_type IN ('service', 'city', 'city_service', 'hub', 'category', 'article', 'product', 'home', 'utility')),
   slug TEXT NOT NULL,
   city TEXT,
   service TEXT,

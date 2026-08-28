@@ -177,9 +177,29 @@ async function discover(domain: string): Promise<{ pages: Discovered[]; error?: 
  * L'inventaire ne sait pas ce qu'est une page : on déduit du slug, et la vérité
  * brute (l'URL) reste dans `content.imported` pour pouvoir corriger plus tard.
  */
-function guessType(slug: string): 'city' | 'service' | 'city_service' {
+// Mêmes règles que `src/lib/page-types.ts` du dashboard (deducePageType) — à
+// tenir à jour ensemble. Un hub de blog, une catégorie, un article ou une fiche
+// produit rangés en « service » recevaient le brief d'une page prestation.
+const BLOG_ROOTS = new Set(['blog', 'actualites', 'actualite', 'conseils', 'guides', 'guide', 'magazine', 'articles', 'news']);
+const BLOG_LISTS = new Set(['categorie', 'category', 'categories', 'tag', 'tags', 'auteur', 'author', 'page']);
+const SHOP_ROOTS = new Set(['vehicules', 'vehicule', 'voitures', 'voiture', 'produit', 'produits', 'catalogue', 'boutique', 'shop', 'occasions', 'stock']);
+const LIST_ROOTS = new Set(['categorie', 'category', 'categories', 'collections', 'collection', 'marques', 'marque']);
+const UTILITY = new Set(['contact', 'mentions-legales', 'mentions', 'cgv', 'cgu', 'politique-de-confidentialite', 'confidentialite', 'cookies', 'plan-du-site', 'sitemap', 'a-propos', 'apropos', 'qui-sommes-nous', 'equipe', 'recrutement', 'devis', 'merci', 'thank-you', '404', 'login', 'compte']);
+
+type PageType = 'city' | 'service' | 'city_service' | 'hub' | 'category' | 'article' | 'product' | 'home' | 'utility';
+
+function guessType(slug: string): PageType {
   const segments = slug.split('/').filter(Boolean);
-  const last = segments[segments.length - 1] || '';
+  if (segments.length === 0) return 'home';
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+  if (UTILITY.has(last)) return 'utility';
+  if (BLOG_ROOTS.has(first)) {
+    if (segments.length === 1) return 'hub';
+    return BLOG_LISTS.has(segments[1]) ? 'category' : 'article';
+  }
+  if (SHOP_ROOTS.has(first)) return segments.length === 1 ? 'category' : 'product';
+  if (LIST_ROOTS.has(first)) return 'category';
   if (CITY_SLUGS.has(last)) return segments.length > 1 ? 'city_service' : 'city';
   // « debosselage-perpignan » : ville en suffixe du dernier segment
   const suffix = [...CITY_SLUGS].find((c) => last.endsWith(`-${c}`));

@@ -82,7 +82,7 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
   Clusters `new`, Pages `status=todo` (draft + brief_ready + error ; `all` = tout sauf 301), Backlog `new`.
 
 ### API routes
-`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/gsc` (+ `sync` POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`
+`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/gsc` (+ `sync` POST), `/api/briefs/prepare` (GET) + `/api/briefs/generate` (POST, overrides), `/api/pages/retype` (POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`
 
 ### Module Backlog SEO (meilleure prochaine action, multi-sites)
 Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
@@ -121,6 +121,25 @@ L'état est dans l'URL (`?site=&view=&period=&compare=`). Bouton **Synchroniser*
 lance `src/jobs/gsc-sync.ts --trigger=dashboard` (un seul passage à la fois, ~8 s) ; le pied de page affiche
 la vraie dernière synchro lue dans `automation_logs` (job `gsc-sync`). Une référence tronquée par l'historique
 est signalée, jamais tue. Les totaux viennent toujours de `gsc_page_daily` ; le détail par requête reste partiel.
+
+### Éditeur de page — brief depuis les faits (chantier A, 2026-08-28)
+- **Types de page réels** (`src/lib/page-types.ts` du dashboard, contrainte `seo_pages_page_type_check`
+  élargie par `src/db/migration-page-types.sql`) : service · city_service · city · **hub · category ·
+  article · product · home · utility**. Déduits du chemin sans IA (`deducePageType`, même règle dans
+  `scripts/import-inventaire.ts`), éditables dans la fiche, rattrapés par `POST /api/pages/retype[?apply=1]`
+  (81 pages requalifiées le 2026-08-28). Le type pilote le brief, la génération et le profil de score ;
+  `product` et `utility` ne reçoivent pas de brief SERP.
+- **Panneau « Avant le brief »** (`src/components/BriefPanel.tsx`, `GET /api/briefs/prepare`) : la requête
+  déduite avec sa source — **GSC de l'URL (180 j) → champ service → H1 → slug** pour une page existante,
+  requête de tête pour un cluster (`src/lib/brief-source.ts`) — les variantes, le type, le profil, ce qui
+  existe déjà en ligne, et les **consignes**. `POST /api/briefs/generate` accepte `main_keyword`,
+  `secondary_keywords`, `page_type`, `profile_id`, `instructions` ; un mot seul de rubrique (« blog »,
+  « contact ») est refusé en 422 `generic_keyword`. Les consignes sont stockées dans `brief.instructions`
+  et injectées en tête du prompt d'angle **et** de rédaction (`instructionsBlock`). Même panneau depuis
+  `/clusters` et depuis le bouton **« Préparer la page »** des actions CREATE_PAGE du backlog.
+- **« Tel que servi »** dans `/pages/[id]` : la page réelle (dernier crawl) bloc par bloc, chaque bloc marqué
+  **CMS** ou **hérité du site** (CTA, hero, maillage automatique) — `renderedBlocks` compare les H2 servis
+  aux `seoSections` du CMS. Une page `external` est entièrement « héritée du site ».
 
 ### Module Backlinks (autorité off-page)
 Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
@@ -170,7 +189,7 @@ npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — 
 
 | Table | Rôle | Colonnes clés |
 |-------|------|---------------|
-| seo_pages | Pages SEO générées | site_key, slug, city, service, content (JSONB), status (draft/published/optimized/error/redirected/brief_ready/**external**), deployed_revision_id |
+| seo_pages | Pages SEO générées | site_key, slug, city, service, **page_type** (service/city/city_service/hub/category/article/product/home/utility), content (JSONB, dont `brief.instructions`), status (draft/published/optimized/error/redirected/brief_ready/**external**), deployed_revision_id |
 | opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
 | seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
 | site_profiles | **Registre des sites — source unique de vérité** | site_key, is_active, name/label/color, domain, gsc_domain, phone/email/adresse, schema_type, scope, **mode (local/thematic/product)**, niche, triage_instructions, delivery_mode + revalidate_url/secret, project_path & fichiers cibles, vercel_hook_env, services (JSONB), seo_keyword_patterns, brand, enabled_intents, content_rules, cocooning |
