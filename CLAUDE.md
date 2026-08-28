@@ -105,6 +105,12 @@ sitemap, ou si des URL déclarées cassent/redirigent/manquent — affiché sur 
 d'alerte + chips par site + sitemap dépliable avec le HTTP de chaque URL + robots.txt visible), sur
 `/sites` (liste) et sur `/pages/[id]` (carte **Indexation** : HTTP, robots, noindex, sitemap, étape).
 C'est le filet de la bascule CMS : un robots.txt disparu ne produit aucune anomalie par URL.
+**Garde-fou dépublication (2026-08-28)** : `PATCH /api/pages/[id]` refuse de faire quitter `published` à
+une page **indexée ou recevant des impressions** (`v_crawl_latest` + `gsc_page_daily` 28 j) tant que
+`confirm: true` n'est pas envoyé — 428 `needs_confirm` avec les enjeux et la conséquence selon le mode
+(`src/lib/unpublish.ts`). Une dépublication sur un site CMS purge le cache (`revalidateCms`, partagé avec
+la publication) : sans purge la page restait servie et le crawl la ressortait en « brouillon en ligne ».
+Seul geste du dashboard qui peut coûter des positions.
 
 ### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
 **Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
