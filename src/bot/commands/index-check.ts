@@ -12,7 +12,7 @@ export function registerIndexCommand(bot: Bot<BotContext>) {
       for (const key of Object.keys(sites)) {
         keyboard.text(sites[key].name, `idx:${key}`).row();
       }
-      await ctx.reply('Vérifier l\'indexation de quel site ?', { reply_markup: keyboard });
+      await ctx.reply("Vérifier l'indexation de quel site ?", { reply_markup: keyboard });
       return;
     }
 
@@ -27,7 +27,7 @@ export function registerIndexCommand(bot: Bot<BotContext>) {
   bot.callbackQuery(/^idx:(.+)$/, async (ctx) => {
     const siteKey = ctx.match![1];
     await ctx.answerCallbackQuery();
-    await ctx.editMessageText('Vérification de l\'indexation...');
+    await ctx.editMessageText("Vérification de l'indexation...");
     await showIndexation(ctx, siteKey);
   });
 }

@@ -37,7 +37,9 @@ export async function discoverProperties(force = false): Promise<Map<string, str
 
   for (const [domain, siteKey] of Object.entries(gscSites)) {
     if (!found.has(siteKey)) {
-      logger.warn(`GSC: aucune propriété accessible pour ${siteKey} (${domain}) — partager le service account dans sa Search Console`);
+      logger.warn(
+        `GSC: aucune propriété accessible pour ${siteKey} (${domain}) — partager le service account dans sa Search Console`,
+      );
     }
   }
 

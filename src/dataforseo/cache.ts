@@ -11,10 +11,10 @@ import * as logger from '../utils/logger.js';
 
 /** TTL par famille d'endpoint, en jours. */
 const TTL_DAYS: Array<[RegExp, number]> = [
-  [/^\/serp\//, 7],              // SERP : structure stable à l'échelle de la semaine
-  [/^\/keywords_data\//, 30],    // volumes : mis à jour mensuellement par Google
-  [/^\/dataforseo_labs\//, 30],  // idées/KD : même cadence
-  [/^\/backlinks\//, 14],        // profil de liens : évolution lente
+  [/^\/serp\//, 7], // SERP : structure stable à l'échelle de la semaine
+  [/^\/keywords_data\//, 30], // volumes : mis à jour mensuellement par Google
+  [/^\/dataforseo_labs\//, 30], // idées/KD : même cadence
+  [/^\/backlinks\//, 14], // profil de liens : évolution lente
 ];
 const DEFAULT_TTL_DAYS = 7;
 
@@ -27,11 +27,17 @@ function stableStringify(v: unknown): string {
   if (v === null || typeof v !== 'object') return JSON.stringify(v);
   if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
   const o = v as Record<string, unknown>;
-  return `{${Object.keys(o).sort().map(k => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(',')}}`;
+  return `{${Object.keys(o)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`)
+    .join(',')}}`;
 }
 
 export function cacheKey(endpoint: string, body: unknown): string {
-  return crypto.createHash('sha256').update(`${endpoint}|${stableStringify(body)}`).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(`${endpoint}|${stableStringify(body)}`)
+    .digest('hex');
 }
 
 export interface DfsCacheOptions {
@@ -87,9 +93,8 @@ export async function withDfsCache<T>(
   const response = await fetcher();
 
   // DataForSEO renvoie le coût réel de l'appel dans `cost` — plus fiable qu'une estimation.
-  const realCost = typeof (response as { cost?: unknown })?.cost === 'number'
-    ? (response as { cost: number }).cost
-    : cost;
+  const realCost =
+    typeof (response as { cost?: unknown })?.cost === 'number' ? (response as { cost: number }).cost : cost;
 
   try {
     const db = getSupabase();

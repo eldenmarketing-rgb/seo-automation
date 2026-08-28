@@ -26,7 +26,11 @@ export function gscStage(row: CrawlRow): Stage | 'NONE' | null {
 
   const coverage = (row.gsc_coverage_state || '').toLowerCase();
 
-  if (row.gsc_verdict === 'PASS' || coverage.includes('submitted and indexed') || coverage.startsWith('indexed')) {
+  if (
+    row.gsc_verdict === 'PASS' ||
+    coverage.includes('submitted and indexed') ||
+    coverage.startsWith('indexed')
+  ) {
     return 'INDEXED';
   }
   if (coverage.includes('unknown to google')) return 'NONE';

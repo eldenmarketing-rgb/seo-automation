@@ -169,13 +169,19 @@ export function extractRendered($: CheerioAPI, origin: string): RenderedExtract 
     if (tag === 'h1') return;
 
     if (tag === 'h2') {
-      const title = squash((node.children || []).map(inline).join('')).replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+      const title = squash((node.children || []).map(inline).join('')).replace(
+        /\[([^\]]*)\]\([^)]*\)/g,
+        '$1',
+      );
       sections.push({ title, blocks: [] });
       return;
     }
 
     if (tag === 'h3' || tag === 'h4') {
-      const title = squash((node.children || []).map(inline).join('')).replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+      const title = squash((node.children || []).map(inline).join('')).replace(
+        /\[([^\]]*)\]\([^)]*\)/g,
+        '$1',
+      );
       if (title) emit(`### ${title}`);
       return;
     }
@@ -203,7 +209,7 @@ export function extractRendered($: CheerioAPI, origin: string): RenderedExtract 
           $(tr)
             .children('th, td')
             .toArray()
-            .map((c) => squash((c.children || []).map(inline).join('')))
+            .map((c) => squash((c.children || []).map(inline).join(''))),
         )
         .filter((cells) => cells.length > 0);
       if (rows.length) {

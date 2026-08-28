@@ -73,10 +73,7 @@ let rowsPromise: Promise<SiteProfileRow[]> | null = null;
 export function loadSiteProfiles(): Promise<SiteProfileRow[]> {
   if (!rowsPromise) {
     rowsPromise = (async () => {
-      const { data, error } = await getSupabase()
-        .from('site_profiles')
-        .select(COLUMNS)
-        .order('site_key');
+      const { data, error } = await getSupabase().from('site_profiles').select(COLUMNS).order('site_key');
       if (error) {
         rowsPromise = null; // ne pas figer un échec réseau pour tout le process
         throw new Error(`Registre des sites illisible (site_profiles) : ${error.message}`);

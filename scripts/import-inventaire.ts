@@ -89,7 +89,9 @@ function decodeEntities(text: string): string {
 }
 
 function normalizeText(text: string): string {
-  return decodeEntities(text.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+  return decodeEntities(text.replace(/<[^>]*>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function first(html: string, re: RegExp): string {
@@ -180,13 +182,75 @@ async function discover(domain: string): Promise<{ pages: Discovered[]; error?: 
 // Mêmes règles que `src/lib/page-types.ts` du dashboard (deducePageType) — à
 // tenir à jour ensemble. Un hub de blog, une catégorie, un article ou une fiche
 // produit rangés en « service » recevaient le brief d'une page prestation.
-const BLOG_ROOTS = new Set(['blog', 'actualites', 'actualite', 'conseils', 'guides', 'guide', 'magazine', 'articles', 'news']);
-const BLOG_LISTS = new Set(['categorie', 'category', 'categories', 'tag', 'tags', 'auteur', 'author', 'page']);
-const SHOP_ROOTS = new Set(['vehicules', 'vehicule', 'voitures', 'voiture', 'produit', 'produits', 'catalogue', 'boutique', 'shop', 'occasions', 'stock']);
-const LIST_ROOTS = new Set(['categorie', 'category', 'categories', 'collections', 'collection', 'marques', 'marque']);
-const UTILITY = new Set(['contact', 'mentions-legales', 'mentions', 'cgv', 'cgu', 'politique-de-confidentialite', 'confidentialite', 'cookies', 'plan-du-site', 'sitemap', 'a-propos', 'apropos', 'qui-sommes-nous', 'equipe', 'recrutement', 'devis', 'merci', 'thank-you', '404', 'login', 'compte']);
+const BLOG_ROOTS = new Set([
+  'blog',
+  'actualites',
+  'actualite',
+  'conseils',
+  'guides',
+  'guide',
+  'magazine',
+  'articles',
+  'news',
+]);
+const BLOG_LISTS = new Set([
+  'categorie',
+  'category',
+  'categories',
+  'tag',
+  'tags',
+  'auteur',
+  'author',
+  'page',
+]);
+const SHOP_ROOTS = new Set([
+  'vehicules',
+  'vehicule',
+  'voitures',
+  'voiture',
+  'produit',
+  'produits',
+  'catalogue',
+  'boutique',
+  'shop',
+  'occasions',
+  'stock',
+]);
+const LIST_ROOTS = new Set([
+  'categorie',
+  'category',
+  'categories',
+  'collections',
+  'collection',
+  'marques',
+  'marque',
+]);
+const UTILITY = new Set([
+  'contact',
+  'mentions-legales',
+  'mentions',
+  'cgv',
+  'cgu',
+  'politique-de-confidentialite',
+  'confidentialite',
+  'cookies',
+  'plan-du-site',
+  'sitemap',
+  'a-propos',
+  'apropos',
+  'qui-sommes-nous',
+  'equipe',
+  'recrutement',
+  'devis',
+  'merci',
+  'thank-you',
+  '404',
+  'login',
+  'compte',
+]);
 
-type PageType = 'city' | 'service' | 'city_service' | 'hub' | 'category' | 'article' | 'product' | 'home' | 'utility';
+type PageType =
+  'city' | 'service' | 'city_service' | 'hub' | 'category' | 'article' | 'product' | 'home' | 'utility';
 
 function guessType(slug: string): PageType {
   const segments = slug.split('/').filter(Boolean);
@@ -224,14 +288,16 @@ async function main() {
   if (sitesErr) throw new Error(`Registre des sites : ${sitesErr.message}`);
 
   const targets = (sites as SiteRow[]).filter(
-    (s) => s.domain && (!only || s.site_key === only) && (only ? true : s.is_active)
+    (s) => s.domain && (!only || s.site_key === only) && (only ? true : s.is_active),
   );
   if (targets.length === 0) {
     console.log(only ? `Aucun site « ${only} » avec un domaine.` : 'Aucun site actif avec un domaine.');
     return;
   }
 
-  console.log(apply ? '\n=== IMPORT (écriture en base) ===\n' : '\n=== SIMULATION (--apply pour écrire) ===\n');
+  console.log(
+    apply ? '\n=== IMPORT (écriture en base) ===\n' : '\n=== SIMULATION (--apply pour écrire) ===\n',
+  );
 
   let totalNew = 0;
   let totalKnown = 0;
@@ -308,8 +374,8 @@ async function main() {
 
       imported.push(
         `${(page.slug || '(accueil)').padEnd(46)} ${String(facts.wordCount).padStart(5)} mots  ${String(
-          facts.internalLinks
-        ).padStart(3)} liens  ${facts.h1.slice(0, 42)}`
+          facts.internalLinks,
+        ).padStart(3)} liens  ${facts.h1.slice(0, 42)}`,
       );
     }
 
@@ -321,7 +387,7 @@ async function main() {
       `${site.site_key.padEnd(14)} ${String(pages.length).padStart(3)} URL au sitemap · ` +
         `${String(pages.length - missing.length).padStart(3)} déjà en base · ` +
         `${String(imported.length).padStart(3)} à importer` +
-        (skipped.length ? ` · ${skipped.length} écartée(s)` : '')
+        (skipped.length ? ` · ${skipped.length} écartée(s)` : ''),
     );
     for (const line of imported) console.log(`   + ${line}`);
     for (const line of skipped) console.log(`   ✗ ${line}`);
@@ -330,7 +396,7 @@ async function main() {
 
   console.log(
     `\n${totalNew} page(s) ${apply ? 'importée(s)' : 'à importer'} · ` +
-      `${totalKnown} déjà connue(s) · ${totalSkipped} écartée(s) faute de 200.\n`
+      `${totalKnown} déjà connue(s) · ${totalSkipped} écartée(s) faute de 200.\n`,
   );
   if (!apply && totalNew > 0) console.log('Relancer avec --apply pour écrire en base.\n');
 }

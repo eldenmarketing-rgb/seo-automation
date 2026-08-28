@@ -5,7 +5,7 @@ import { GscPositionRow, insertGscPositions, getLatestGscDate } from '../db/supa
 import * as logger from '../utils/logger.js';
 
 interface GscRow {
-  keys: string[];   // [query, page]
+  keys: string[]; // [query, page]
   clicks: number;
   impressions: number;
   ctr: number;

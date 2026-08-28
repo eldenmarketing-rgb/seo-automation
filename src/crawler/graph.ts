@@ -41,7 +41,7 @@ export function buildGraph(pages: GraphInput[], homeUrl: string): GraphResult {
 
     outgoing.set(
       from,
-      [...new Set(page.all.map(normalizeUrl))].filter((t) => t !== from && known.has(t))
+      [...new Set(page.all.map(normalizeUrl))].filter((t) => t !== from && known.has(t)),
     );
   }
 

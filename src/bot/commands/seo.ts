@@ -49,8 +49,8 @@ async function showSiteSeo(ctx: BotContext, siteKey: string) {
     if (summary.totalImpressions === 0) {
       await ctx.reply(
         `<b>${site.name}</b> — Aucune donnée GSC\n\n` +
-        `Vérifie que le site est bien ajouté dans Search Console et que le service account a accès.`,
-        { parse_mode: 'HTML' }
+          `Vérifie que le site est bien ajouté dans Search Console et que le service account a accès.`,
+        { parse_mode: 'HTML' },
       );
       return;
     }
@@ -69,9 +69,8 @@ async function showSiteSeo(ctx: BotContext, siteKey: string) {
 
     msg += `<b>Top requêtes :</b>\n`;
     for (const q of summary.topQueries.slice(0, 10)) {
-      const pos = q.position <= 3 ? `🟢 #${q.position}` :
-                  q.position <= 10 ? `🟡 #${q.position}` :
-                  `🔴 #${q.position}`;
+      const pos =
+        q.position <= 3 ? `🟢 #${q.position}` : q.position <= 10 ? `🟡 #${q.position}` : `🔴 #${q.position}`;
       msg += `  ${pos} "${q.query}" (${q.impressions} imp, ${q.clicks} clics)\n`;
     }
 

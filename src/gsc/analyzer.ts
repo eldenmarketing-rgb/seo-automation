@@ -49,12 +49,15 @@ async function findCandidatesDirect(siteKey: string): Promise<CandidateRow[]> {
   if (!positions || positions.length === 0) return [];
 
   // Group by page_url
-  const byPage = new Map<string, {
-    positions: number[];
-    impressions: number;
-    clicks: number;
-    queries: Array<{ query: string; position: number; impressions: number }>;
-  }>();
+  const byPage = new Map<
+    string,
+    {
+      positions: number[];
+      impressions: number;
+      clicks: number;
+      queries: Array<{ query: string; position: number; impressions: number }>;
+    }
+  >();
 
   for (const row of positions) {
     const existing = byPage.get(row.page_url) || {
@@ -80,9 +83,7 @@ async function findCandidatesDirect(siteKey: string): Promise<CandidateRow[]> {
     const avg = data.positions.reduce((a, b) => a + b, 0) / data.positions.length;
     if (avg >= 5 && avg <= 15) {
       // Sort queries by impressions desc, keep top 10
-      const topQueries = data.queries
-        .sort((a, b) => b.impressions - a.impressions)
-        .slice(0, 10);
+      const topQueries = data.queries.sort((a, b) => b.impressions - a.impressions).slice(0, 10);
 
       candidates.push({
         page_url: pageUrl,
@@ -119,13 +120,10 @@ export async function queueCandidates(siteKey: string, candidates: CandidateRow[
   const existingUrls = new Set((existing || []).map((r: { page_url: string }) => r.page_url));
 
   // Find matching seo_pages for content
-  const { data: seoPages } = await db
-    .from('seo_pages')
-    .select('id, slug, content')
-    .eq('site_key', siteKey);
+  const { data: seoPages } = await db.from('seo_pages').select('id, slug, content').eq('site_key', siteKey);
 
   const seoPageMap = new Map(
-    (seoPages || []).map((p: { id: string; slug: string; content: Record<string, unknown> }) => [p.slug, p])
+    (seoPages || []).map((p: { id: string; slug: string; content: Record<string, unknown> }) => [p.slug, p]),
   );
 
   for (const candidate of candidates) {

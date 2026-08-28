@@ -49,7 +49,7 @@ export async function checkIndexation(siteKey: string): Promise<IndexationReport
   }
 
   // Pages not found in GSC = probably not indexed
-  const notIndexedPages = allSlugs.filter(slug => !indexedSlugs.has(slug));
+  const notIndexedPages = allSlugs.filter((slug) => !indexedSlugs.has(slug));
 
   // Pages with very low impressions
   const lowImpressionPages: Array<{ slug: string; impressions: number }> = [];
@@ -60,7 +60,9 @@ export async function checkIndexation(siteKey: string): Promise<IndexationReport
     }
   }
 
-  logger.info(`Indexation ${siteKey}: ${indexedSlugs.size}/${allSlugs.length} indexed, ${notIndexedPages.length} missing`);
+  logger.info(
+    `Indexation ${siteKey}: ${indexedSlugs.size}/${allSlugs.length} indexed, ${notIndexedPages.length} missing`,
+  );
 
   return {
     totalPages: allSlugs.length,
