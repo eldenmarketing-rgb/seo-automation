@@ -83,9 +83,16 @@ tenir à jour avec `src/crawler/types.ts` et `src/crawler/issues.ts`.
 ### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
 **Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
 — « Google te montre déjà sur cette requête sans page dédiée » = demande **prouvée sur le domaine**.
-**Site muet** (carrosserie 19 impressions, site neuf, pas de propriété GSC) : repli sur
-`discovered_keywords` **en statut `approved` uniquement** (`src/lib/keyword-detectors.ts` du dashboard).
+**Site muet** (carrosserie 19 impressions, site neuf, pas de propriété GSC) : repli sur les
+**clusters `approved`** de `keyword_clusters` (`src/lib/keyword-detectors.ts` du dashboard).
 Les 22 000 mots-clés bruts de DataForSEO ne déclenchent rien : le tri humain reste obligatoire.
+Approuver un cluster redescend sur ses mots-clés (`src/lib/cluster-keywords.ts`) — sans ça le
+détecteur ne voyait rien (constat du 2026-08-28 : 59 clusters approuvés, 0 mot-clé approuvé).
+L'unité est la **page cible** (plusieurs clusters visant le même `suggested_slug` = une page),
+le volume est celui de la **requête de tête** (pas la somme des variantes) et, sur un site
+`scope = local`, il est ramené à la zone (× 0,72 % = population des P.-O. / France) sauf si la
+requête nomme déjà un lieu. Une page dont une formulation validée correspond à un slug existant
+(comparaison sur radicaux : « carrossiers » ↔ `/carrosserie-perpignan`) n'est pas proposée.
 Une hypothèse ne doit jamais devancer une demande prouvée — impact calculé au CTR du **bas de
 première page**, confiance plafonnée (0,35 max, 0,15 si `kd` vaut 0 = difficulté non calculée),
 5 propositions par site. DataForSEO sert donc à trois choses : lancer un site neuf, chiffrer une
