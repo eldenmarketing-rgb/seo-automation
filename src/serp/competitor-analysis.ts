@@ -19,6 +19,78 @@ const DATAFORSEO_LOGIN = env.DATAFORSEO_LOGIN ?? '';
 const DATAFORSEO_PASSWORD = env.DATAFORSEO_PASSWORD ?? '';
 const API_BASE = 'https://api.dataforseo.com/v3';
 
+/**
+ * Mots écartés de l'extraction TF. La liste d'origine (14 mots grammaticaux)
+ * laissait passer le boilerplate des plateformes de réservation et des avis
+ * clients : sur « massage intuitif perpignan », le top 3 (Fresha, Planity)
+ * faisait remonter « merci », « moment », « experience » — et le rédacteur,
+ * sommé de les intégrer, écrivait des phrases dont le seul but était de caser
+ * le mot (« Merci de préciser vos disponibilités... »). Termes normalisés
+ * NFD sans accents, comme le texte comparé.
+ */
+const STOP_WORDS = new Set([
+  // grammaticaux
+  'cette',
+  'votre',
+  'notre',
+  'leurs',
+  'entre',
+  'aussi',
+  'toute',
+  'toutes',
+  'comme',
+  'apres',
+  'avant',
+  'depuis',
+  'encore',
+  'meme',
+  'plus',
+  'chaque',
+  'ainsi',
+  'alors',
+  'autre',
+  'autres',
+  'celle',
+  'celui',
+  'quand',
+  'était',
+  'etait',
+  'etre',
+  'faire',
+  'peuvent',
+  'toujours',
+  'jamais',
+  'beaucoup',
+  'vraiment',
+  // politesse et avis clients
+  'merci',
+  'bonjour',
+  'bonsoir',
+  'moment',
+  'moments',
+  'super',
+  'genial',
+  'parfait',
+  'sympa',
+  'agreable',
+  'recommande',
+  'vivement',
+  'experience',
+  'experiences',
+  // interface des plateformes de réservation
+  'cliquez',
+  'decouvrez',
+  'reserver',
+  'reservez',
+  'rendez',
+  'ligne',
+  'compte',
+  'connexion',
+  'propos',
+  'horaires',
+  'ouverture',
+]);
+
 // ─── Types ───────────────────────────────────────────────────
 
 export interface SerpCompetitor {
@@ -163,25 +235,7 @@ async function analyzePageContent(url: string): Promise<ContentAnalysis | null> 
       .replace(/[\u0300-\u036f]/g, '')
       .split(/\s+/)
       .filter((w) => w.length > 4)
-      .filter(
-        (w) =>
-          ![
-            'cette',
-            'votre',
-            'notre',
-            'leurs',
-            'entre',
-            'aussi',
-            'toute',
-            'comme',
-            'apres',
-            'avant',
-            'depuis',
-            'encore',
-            'meme',
-            'plus',
-          ].includes(w),
-      );
+      .filter((w) => !STOP_WORDS.has(w));
 
     const freq = new Map<string, number>();
     for (const w of words) {
@@ -281,8 +335,12 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
       termFreq.set(term, (termFreq.get(term) || 0) + 1);
     }
   }
+  // « Manquants » = absents de NOTRE requête. Sans ce filtre, « massage » et
+  // « perpignan » étaient réclamés comme termes à intégrer sur la requête
+  // « massage intuitif perpignan » — et le rédacteur les sur-répétait.
+  const queryNorm = query.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const missingTerms = [...termFreq.entries()]
-    .filter(([_, count]) => count >= 2)
+    .filter(([term, count]) => count >= 2 && !queryNorm.includes(term.replace(/s$/, '')))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15)
     .map(([term]) => term);
@@ -361,7 +419,9 @@ function buildSerpPromptBlock(
 
   if (missingTerms.length > 0) {
     parts.push('');
-    parts.push(`TERMES SÉMANTIQUES À INTÉGRER (présents chez les concurrents) :`);
+    parts.push(
+      `TERMES OBSERVÉS CHEZ LES CONCURRENTS — à placer uniquement là où ils viennent naturellement, jamais dans une phrase écrite pour les caser :`,
+    );
     parts.push(missingTerms.map((t) => `- ${t}`).join('\n'));
   }
 
@@ -405,7 +465,8 @@ export async function quickSerpTerms(query: string): Promise<string[]> {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .split(/\s+/)
-      .filter((w) => w.length > 4);
+      .filter((w) => w.length > 4)
+      .filter((w) => !STOP_WORDS.has(w));
     allTerms.push(...text);
   }
 
