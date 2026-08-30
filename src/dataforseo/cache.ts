@@ -49,6 +49,29 @@ export interface DfsCacheOptions {
   force?: boolean;
 }
 
+interface DfsEnvelope {
+  status_code?: number;
+  status_message?: string;
+  tasks?: Array<{ status_code?: number; status_message?: string }>;
+}
+
+/** Vrai si l'enveloppe DataForSEO et chacune de ses tâches sont en 20000 (ou si ce n'est pas une enveloppe). */
+function isSuccessful(response: unknown): boolean {
+  const env = response as DfsEnvelope | null;
+  if (!env || typeof env !== 'object') return true;
+  if (typeof env.status_code === 'number' && env.status_code !== 20000) return false;
+  if (Array.isArray(env.tasks)) return env.tasks.every((t) => t?.status_code === 20000);
+  return true;
+}
+
+function describeFailure(response: unknown): string {
+  const env = response as DfsEnvelope | null;
+  const task = env?.tasks?.find((t) => t?.status_code !== 20000);
+  return task
+    ? `${task.status_code} ${task.status_message ?? ''}`.trim()
+    : `${env?.status_code} ${env?.status_message ?? ''}`.trim();
+}
+
 /**
  * Sert la réponse depuis le cache si elle est fraîche, sinon appelle `fetcher`
  * et stocke le résultat.
@@ -91,6 +114,16 @@ export async function withDfsCache<T>(
   }
 
   const response = await fetcher();
+
+  // Une réponse en erreur ne se met pas en cache : le 30/08 une tâche SERP en
+  // `40101 Internal SE Server Error` a été servie pendant 7 jours à chaque
+  // nouvel essai, et le brief partait sans SERP sans qu'on sache pourquoi.
+  if (!isSuccessful(response)) {
+    logger.warn(
+      `DataForSEO: réponse en erreur pour ${endpoint} — non mise en cache (${describeFailure(response)})`,
+    );
+    return response;
+  }
 
   // DataForSEO renvoie le coût réel de l'appel dans `cost` — plus fiable qu'une estimation.
   const realCost =
