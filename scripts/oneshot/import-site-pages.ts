@@ -241,10 +241,63 @@ async function importDebarras(): Promise<ImportedPage[]> {
   return pages;
 }
 
+// ─── Garage Perpignan ───────────────────────────────────────────────────
+
+/**
+ * Les 19 pages service vivent dans `data/services.ts` sous la forme typée
+ * `ServicePage` (hero, bloc pédagogique, étapes, marques, FAQ, sections SEO,
+ * maillage, schema). Le gabarit `ServicePageTemplate` reste identique après
+ * bascule : on stocke l'objet entier dans `content`, et le dashboard édite
+ * h1/title/description/intro/sections/FAQ à plat — les autres champs
+ * survivent aux éditions (l'éditeur envoie `{ ...content, [champ] }`).
+ * Le fichier est en CommonJS (pas de `"type": "module"`) : `createRequire`.
+ */
+async function importGarage(): Promise<ImportedPage[]> {
+  const projectPath = '/home/ubuntu/sites/Site_Garage';
+  const { createRequire } = await import('node:module');
+  const { servicePages } = createRequire(import.meta.url)(`${projectPath}/data/services.ts`) as {
+    servicePages: Array<Record<string, unknown> & { slug: string; name: string }>;
+  };
+
+  const pages: ImportedPage[] = [];
+  for (const [index, s] of servicePages.entries()) {
+    const heroSrc = typeof s.heroImage === 'string' ? s.heroImage : null;
+    const meta = heroSrc ? await imageMeta(heroSrc, projectPath) : null;
+    const { slug, metaTitle, metaDescription, h1, canonical, heroImage, ...rest } = s;
+    void canonical;
+    void heroImage;
+
+    pages.push({
+      slug,
+      page_type: 'service',
+      city: 'Perpignan',
+      service: s.name,
+      // Le layout du site n'a pas de template de title : le metaTitle est déjà complet.
+      meta_title: metaTitle as string,
+      meta_description: metaDescription as string,
+      h1: h1 as string,
+      content: {
+        ...rest,
+        // Ordre d'affichage dans les listes (accueil, /services) : celui du fichier.
+        displayOrder: index,
+        ...(heroSrc ? { heroImage: { src: heroSrc, alt: s.name, ...(meta || {}) } } : {}),
+        seoSections: (s.seoSections as unknown[] | undefined) ?? [],
+        faq: (s.faq as unknown[] | undefined) ?? [],
+        highlights: [],
+        trustSignals: [],
+        gallery: [],
+        updatedDate: new Date().toISOString().split('T')[0],
+      },
+    });
+  }
+  return pages;
+}
+
 const IMPORTERS: Record<string, () => Promise<ImportedPage[]>> = {
   carrosserie: importCarrosserie,
   elayarituel: importElayarituel,
   debarras: importDebarras,
+  garage: importGarage,
 };
 
 // ─── Exécution ──────────────────────────────────────────────────────────
@@ -302,8 +355,13 @@ async function main() {
 
   for (const p of pages) {
     const found = bySlug.get(p.slug);
-    // Le profil de score choisi dans le dashboard survit au ré-import.
-    const profile = (found?.content as Record<string, unknown> | null)?.profile;
+    // Le profil de score choisi dans le dashboard et le brief d'analyse
+    // survivent au ré-import : ils ne décrivent pas le contenu, ils le préparent.
+    const kept: Record<string, unknown> = {};
+    for (const k of ['profile', 'brief'] as const) {
+      const v = (found?.content as Record<string, unknown> | null)?.[k];
+      if (v) kept[k] = v;
+    }
     const row = {
       site_key: siteKey,
       slug: p.slug,
@@ -313,7 +371,7 @@ async function main() {
       meta_title: p.meta_title,
       meta_description: p.meta_description,
       h1: p.h1,
-      content: profile ? { profile, ...p.content } : p.content,
+      content: { ...kept, ...p.content },
       status: 'published',
       updated_at: new Date().toISOString(),
     };
