@@ -113,7 +113,10 @@ une page **indexée ou recevant des impressions** (`v_crawl_latest` + `gsc_page_
 `confirm: true` n'est pas envoyé — 428 `needs_confirm` avec les enjeux et la conséquence selon le mode
 (`src/lib/unpublish.ts`). Une dépublication sur un site CMS purge le cache (`revalidateCms`, partagé avec
 la publication) : sans purge la page restait servie et le crawl la ressortait en « brouillon en ligne ».
-Seul geste du dashboard qui peut coûter des positions.
+Seul geste du dashboard qui peut coûter des positions. **Depuis le 2026-08-30**, préférer **« Rediriger »**
+(statut `redirected` + `redirect_to`) : la cible est servie par le site CMS en redirection permanente, et
+renommer une page publiée pose cette ligne automatiquement (dashboard `298cf98`, sites Debarras/Elaya/Garage/
+Mon-Sauveur — Carrosserie exclue).
 
 ### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
 **Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
@@ -217,7 +220,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 
 | Table | Rôle | Colonnes clés |
 |-------|------|---------------|
-| seo_pages | Pages SEO générées | site_key, slug, city, service, **page_type** (service/city/city_service/hub/category/article/product/home/utility), **parent_id** (page parente : accueil/hub/catégorie — fixe le préfixe d'URL et la liste qui reprend la page côté site ; `src/lib/parents.ts` du dashboard, préfixe **déduit** des pages déjà rattachées, jamais déclaré), content (JSONB, dont `brief.instructions` et **`card`** = titre/accroche/description/badges/featured affichés par le parent), status (draft/published/optimized/error/redirected/brief_ready/**external**), deployed_revision_id |
+| seo_pages | Pages SEO générées | site_key, slug, city, service, **page_type** (service/city/city_service/hub/category/article/product/home/utility), **parent_id** (page parente : accueil/hub/catégorie — fixe le préfixe d'URL et la liste qui reprend la page côté site ; `src/lib/parents.ts` du dashboard, préfixe **déduit** des pages déjà rattachées, jamais déclaré), content (JSONB, dont `brief.instructions` et **`card`** = titre/accroche/description/badges/featured affichés par le parent), status (draft/published/optimized/error/redirected/brief_ready/**external**), **redirect_to** (cible d'une ligne `redirected`, chemin absolu — servie en redirection permanente par les sites CMS via `getRedirect` quand aucune page publiée ne répond, les 301 de `next.config` passant avant ; RLS anon = `published` + `redirected` ; migration `migration-redirects.sql` 2026-08-30), deployed_revision_id |
 | opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
 | seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
 | site_profiles | **Registre des sites — source unique de vérité** | site_key, is_active, name/label/color, domain, gsc_domain, phone/email/adresse, schema_type, scope, **mode (local/thematic/product)**, niche, triage_instructions, delivery_mode + revalidate_url/secret, project_path & fichiers cibles, vercel_hook_env, services (JSONB), seo_keyword_patterns, brand, enabled_intents, content_rules, cocooning |

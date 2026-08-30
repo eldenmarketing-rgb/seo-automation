@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS seo_pages (
   -- Page parente (accueil, hub, catégorie) : fixe le préfixe d'URL et la liste qui reprend la page
   -- côté site (migration-page-parent.sql, 2026-08-30).
   parent_id UUID REFERENCES seo_pages(id) ON DELETE SET NULL,
+  -- Cible d'une ligne status = redirected (chemin absolu), servie par les sites CMS
+  -- en redirection permanente (migration-redirects.sql, 2026-08-30).
+  redirect_to TEXT,
   city TEXT,
   service TEXT,
   meta_title TEXT NOT NULL,
