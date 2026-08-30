@@ -275,7 +275,10 @@ async function importGarage(): Promise<ImportedPage[]> {
       // Le layout du site n'a pas de template de title : le metaTitle est déjà complet.
       meta_title: metaTitle as string,
       meta_description: metaDescription as string,
-      h1: h1 as string,
+      // Le gabarit rend `heroTitle` en <h1> ; le champ `h1` du fichier n'était rendu
+      // nulle part. La colonne porte donc ce qui est servi, sinon le dashboard
+      // affiche un H1 que personne ne voit.
+      h1: (typeof s.heroTitle === 'string' && s.heroTitle) || (h1 as string),
       content: {
         ...rest,
         // Ordre d'affichage dans les listes (accueil, /services) : celui du fichier.

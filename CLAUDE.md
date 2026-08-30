@@ -17,7 +17,7 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 **Sites dans le réseau :**
 | Site | Domaine | Schema.org | Projet local |
 |------|---------|------------|--------------|
-| Garage automobile | garage-perpignan.fr | AutoRepair | /home/ubuntu/sites/Site_Garage |
+| Garage automobile | garage-perpignan.fr — **CMS** (19 pages service, 2026-08-30) | AutoRepair | /home/ubuntu/sites/Site_Garage |
 | Carrosserie | CarrosserPro.fr (TF10, 148 referring domains) | AutoBodyShop | /home/ubuntu/sites/Site_Carrosserie |
 | Massage à domicile | — | HealthAndBeautyBusiness | /home/ubuntu/sites/Site_Massage |
 | VTC | ideal-transport.fr | TaxiService | /home/ubuntu/sites/Site_VTC |
