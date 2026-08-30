@@ -188,9 +188,63 @@ async function importElayarituel(): Promise<ImportedPage[]> {
   return pages;
 }
 
+// ─── Débarras Habitat ───────────────────────────────────────────────────
+
+/**
+ * Même mécanique qu'Elaya Rituel : cinq piliers typés (`content.pillar`),
+ * gabarit identique après bascule. Différences : pas d'image hero dans les
+ * piliers, metaTitle stocké tel quel (le gabarit sert déjà le title en
+ * absolu, sans suffixe de marque), H1 « à Perpignan » (pas « à domicile »).
+ */
+async function importDebarras(): Promise<ImportedPage[]> {
+  const projectPath = '/home/ubuntu/sites/Debarras-Habitat';
+  const { pillars } = (await import(`${projectPath}/lib/content/index.ts`)) as {
+    pillars: Record<string, Record<string, unknown>>;
+  };
+  const { services } = (await import(`${projectPath}/lib/config.ts`)) as {
+    services: Array<{ slug: string; title: string }>;
+  };
+
+  const pages: ImportedPage[] = [];
+  for (const service of services) {
+    const pillar = pillars[service.slug];
+    if (!pillar) {
+      console.log(`  (ignoré) ${service.slug} : pas de pilier dans lib/content`);
+      continue;
+    }
+    const hero = pillar.heroImage as { src: string; alt: string } | undefined;
+    const meta = hero ? await imageMeta(hero.src, projectPath) : null;
+    const faq = (pillar.faq as Array<{ q: string; a: string }>).map((f) => ({ question: f.q, answer: f.a }));
+    const lead = pillar.lead as string[];
+
+    pages.push({
+      slug: `prestations/${service.slug}`,
+      page_type: 'city_service',
+      city: 'Perpignan',
+      service: service.title,
+      meta_title: pillar.metaTitle as string,
+      meta_description: pillar.metaDescription as string,
+      h1: `${service.title} à Perpignan`,
+      content: {
+        pillar,
+        ...(hero ? { heroImage: { src: hero.src, alt: hero.alt, ...(meta || {}) } } : {}),
+        intro: lead.join('\n\n'),
+        seoSections: [],
+        faq,
+        highlights: [],
+        trustSignals: [],
+        internalLinks: [],
+        gallery: [],
+      },
+    });
+  }
+  return pages;
+}
+
 const IMPORTERS: Record<string, () => Promise<ImportedPage[]>> = {
   carrosserie: importCarrosserie,
   elayarituel: importElayarituel,
+  debarras: importDebarras,
 };
 
 // ─── Exécution ──────────────────────────────────────────────────────────
