@@ -306,7 +306,7 @@ Deploy      : Vercel (deploy hooks par site)
 Versioning  : GitHub (eldenmarketing-rgb/seo-automation)
 Dashboard   : Next.js 16 / React 19 / Tailwind 4 — local VPS via pm2
 Bot         : Grammy ^1.41.1 (Telegram) — /voiture + /produit
-AI          : Anthropic SDK ^0.39.0 — claude-sonnet-4-20250514
+AI          : Anthropic SDK ^0.39.0 — claude-sonnet-4-20250514 (scripts) ; dashboard = Claude CLI `--model opus` (Opus 5, forfait Max)
 VPS         : OVH Ubuntu 24.04
 ```
 
