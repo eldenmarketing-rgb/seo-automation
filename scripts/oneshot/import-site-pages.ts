@@ -296,11 +296,64 @@ async function importGarage(): Promise<ImportedPage[]> {
   return pages;
 }
 
+// ─── Mon Sauveur (livraison alcool nuit) ────────────────────────────────
+
+/**
+ * 33 pages `[slug]` (19 villes + 14 thématiques) assemblées par `data/seo-pages.ts`
+ * (Pages Router). Le gabarit rend `heroTitle` en <h1> et `h1` dans le fil
+ * d'Ariane : la colonne `h1` porte donc le heroTitle (ce qui est servi, ce que
+ * le dashboard édite) et l'ancien `h1` devient `content.breadcrumbLabel`.
+ * `internalLinks` garde la forme du site `{ slug, label }` ; `lib/cms.ts` du
+ * site accepte aussi `{ url, anchor }` que le dashboard écrit.
+ */
+async function importRestaurant(): Promise<ImportedPage[]> {
+  const projectPath = '/home/ubuntu/sites/Mon-Sauveur';
+  const { createRequire } = await import('node:module');
+  const { seoPages, ALL_CITY_LINKS } = createRequire(import.meta.url)(`${projectPath}/data/seo-pages.ts`) as {
+    seoPages: Array<Record<string, unknown> & { slug: string; h1: string; heroTitle: string }>;
+    ALL_CITY_LINKS: Array<{ slug: string; label: string }>;
+  };
+  const labels = new Map(ALL_CITY_LINKS.map((l) => [l.slug, l.label]));
+
+  const pages: ImportedPage[] = [];
+  for (const [index, p] of seoPages.entries()) {
+    const isCity = /^livraison-alcool-nuit-/.test(p.slug);
+    const label = labels.get(p.slug) ?? p.h1;
+    const city = isCity ? label.replace(/^Livraison alcool nuit /, '') : 'Perpignan';
+    const { slug, metaTitle, metaDescription, h1, heroTitle, ...rest } = p;
+    void slug;
+
+    pages.push({
+      slug: p.slug,
+      page_type: isCity ? 'city' : 'service',
+      city,
+      service: isCity ? 'Livraison alcool nuit' : label,
+      meta_title: metaTitle as string,
+      meta_description: metaDescription as string,
+      h1: heroTitle.replace(/\s*\n\s*/g, ' ').trim(),
+      content: {
+        ...rest,
+        breadcrumbLabel: h1,
+        displayOrder: index,
+        seoSections: (p.seoSections as unknown[] | undefined) ?? [],
+        faq: (p.faq as unknown[] | undefined) ?? [],
+        highlights: (p.highlights as unknown[] | undefined) ?? [],
+        trustSignals: (p.trustSignals as unknown[] | undefined) ?? [],
+        internalLinks: (p.internalLinks as unknown[] | undefined) ?? [],
+        gallery: [],
+        updatedDate: (p.updatedDate as string | undefined) ?? new Date().toISOString().split('T')[0],
+      },
+    });
+  }
+  return pages;
+}
+
 const IMPORTERS: Record<string, () => Promise<ImportedPage[]>> = {
   carrosserie: importCarrosserie,
   elayarituel: importElayarituel,
   debarras: importDebarras,
   garage: importGarage,
+  restaurant: importRestaurant,
 };
 
 // ─── Exécution ──────────────────────────────────────────────────────────
