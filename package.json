@@ -7,6 +7,7 @@
     "bot": "tsx src/bot/index.ts",
     "crawl": "tsx scripts/crawl.ts",
     "gsc-sync": "tsx src/jobs/gsc-sync.ts",
+    "competitors": "tsx src/jobs/competitors-scan.ts",
     "audit": "tsx src/jobs/weekly-gsc-audit.ts",
     "cluster": "tsx src/jobs/weekly-clustering.ts",
     "setup-db": "tsx scripts/setup-db.ts",

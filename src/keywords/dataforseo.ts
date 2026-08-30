@@ -76,7 +76,7 @@ export interface KeywordResearchResult {
 
 // ─── API Caller ──────────────────────────────────────────────
 
-async function callApi<T>(endpoint: string, body: unknown[], retries = 2): Promise<T> {
+export async function callApi<T>(endpoint: string, body: unknown[], retries = 2): Promise<T> {
   // Cache d'abord : une requête identique déjà achetée n'est pas repayée (W0.3).
   return withDfsCache(endpoint, body, () => callApiLive<T>(endpoint, body, retries));
 }

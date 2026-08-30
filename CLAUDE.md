@@ -65,12 +65,12 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`.
 
 ### Pages
-`/` (plan d'action), `/backlog`, `/gsc`, `/indexation`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/sites`.
+`/` (plan d'action), `/backlog`, `/gsc`, `/indexation`, `/concurrents`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/sites`.
 `/pipeline` et `/cannibalization` redirigent en 308 vers les onglets de `/pages` (`next.config.ts`).
 
 ### Navigation, périmètre, pagination (2026-08-28)
 - **Nav latérale par étape du workflow** (`src/components/Nav.tsx`) : Décider (Plan, Backlog) · Constater (Search
-  Console, Indexation) · Produire (Mots-clés, Clusters, Pages) · Autorité (Backlinks) · Réglages (Sites).
+  Console, Indexation, Concurrents) · Produire (Mots-clés, Clusters, Pages) · Autorité (Backlinks) · Réglages (Sites).
 - **Périmètre site global** (`src/lib/site-scope.tsx`, `useSiteScope()`) : un seul filtre dans la colonne de gauche,
   porté par `?site=` dans l'URL (lien partageable), propagé par la nav, mémorisé en `localStorage`. Les écrans ne
   posent plus leur propre filtre ; GSC et Backlinks, qui ne savent pas additionner les sites, prennent le premier
@@ -87,7 +87,7 @@ husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`
 `/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/gsc` (+ `sync` POST), `/api/briefs/prepare` (GET) + `/api/briefs/generate` (POST, overrides), `/api/generate/prompt` (GET
 `?page_id=`/`?cluster_id=` — le prompt de génération exact en texte brut, lien « Voir le prompt » dans
 l'éditeur ; assemblage partagé `src/lib/generation-prompt.ts`, prompt intégral aussi loggé dans
-`automation_logs.details.prompt`), `/api/pages/retype` (POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`, `/api/jobs` (POST : crée le journal d'un brief/génération, + `[id]` GET : progression — `job_id` accepté par `/api/briefs/generate` et `/api/generate`)
+`automation_logs.details.prompt`), `/api/pages/retype` (POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`, `/api/concurrents` (GET `?site=` modèle + verdict, POST ajout ; `[id]` PATCH/DELETE ; `scan` POST = lance `src/jobs/competitors-scan.ts --apply --site=`), `/api/jobs` (POST : crée le journal d'un brief/génération, + `[id]` GET : progression — `job_id` accepté par `/api/briefs/generate` et `/api/generate`)
 
 ### Module Backlog SEO (meilleure prochaine action, multi-sites)
 Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
@@ -166,6 +166,38 @@ est signalée, jamais tue. Les totaux viennent toujours de `gsc_page_daily` ; le
 ### Module Backlinks (autorité off-page)
 Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
 
+### Module Concurrents — « pourquoi je suis derrière » (2026-08-30)
+Page `/concurrents` (Constater) + `/api/concurrents`. Répond « qui est devant, avec quoi, et quel
+facteur domine », jamais « quelles pages ils ont » : la preuve Carrosserie du 28/08 (pages meilleures
+que la SERP, 77 liens PBN, 0 fiche locale) a montré que comparer les sitemaps répond à côté.
+- **Faits** (seo-automation, `src/competitors/` + `src/jobs/competitors-scan.ts`, `npm run competitors`,
+  cron lundi 7h10) : SERP top 10 **mobile localisée Perpignan** (France pour un site `national`) des
+  requêtes du site (GSC 28 j → clusters approuvés si muet → services + ville, ≤ 30, pas de filtre marque),
+  écrite dans `competitor_serp` ; domaines récurrents (≥ 3 requêtes, hors réseaux sociaux / emploi)
+  proposés dans `competitors` en `suggested` avec une nature (`direct` / `annuaire` = annuaires,
+  plateformes, institutions / `reseau` = enseignes nationales) ; pour chaque concurrent **actif** et pour
+  nous : sitemap (+ `new_urls` vs passage précédent), résumé et domaines référents DataForSEO classés
+  (`classify.ts` : spam-pbn, social, annuaire, presse…), faits des pages qui rankent devant nous
+  (`parsePage` du crawler) → `competitor_snapshots`. **Opt-in par site** : rien n'est dépensé sans ligne
+  `competitors` (le bouton « Analyser » passe `--suggest`). ~0,10 $ de SERP par site (cache 7 j) +
+  ~0,05 $ par domaine comparé (cache 14 j). Carrosserie jamais touchée sans geste explicite.
+- **Verdict** (dashboard `src/lib/competitors.ts`, règles dans `VERDICT_CONFIG`, chaque facteur expose
+  ses chiffres) dans cet ordre, le premier vrai domine : 1) `indexation` > 50 % de nos pages indexables
+  non indexées (`v_crawl_latest`) ; 2) `entite_locale` pack local sur ≥ 50 % des requêtes, nous sur
+  < 20 % ; 3) `liens` médiane des domaines référents **propres** (hors spam, rang > 0) des concurrents
+  directs devant nous ≥ 3 × les nôtres ; 4) `contenu` sur les requêtes hors top 10, pas de page ou page
+  < 70 % des mots de celles qui rankent ; 5) `parite`. Constat du 2026-08-30 : garage 34 domaines
+  référents **tous spam de rang 0** (même réseau que carrossier-pro), VTC 12 idem ; les deux absents du
+  pack local sur 23/30 et 15/25 requêtes.
+- **Actions** (`src/lib/competitor-detectors.ts`, `source = scan:competitors`, branché dans `runScan`) :
+  GBP_OPTIMIZATION (site), BACKLINK (site, gap en détails — le tracker se remplit depuis l'onglet, bouton
+  « Au tracker » = POST `/api/backlinks`), CREATE_PAGE sur requête prouvée où ≥ 2 concurrents directs ont
+  une page dédiée et aucun slug ne couvre (confiance 0,35), CREATE_PAGE « page de confiance » (tarifs,
+  avis, agréments… chez ≥ 2 concurrents, confiance 0,2), OPTIMIZE_PAGE quand notre page en 4-20 est
+  ≥ 1,5 × plus courte que celles devant. `details.lines` = preuves affichées dans `/backlog`.
+- Piège vu le 2026-08-30 : `runScan` **purge** les actions `new` avant l'upsert ; une contrainte qui
+  refuse une nouvelle valeur (`opportunities_sources_check`) vide le backlog au lieu d'ajouter des lignes.
+
 ---
 
 ## Bot Telegram — Commandes actives
@@ -202,6 +234,7 @@ La gestion SEO se fait via le dashboard.
 npm run bot            # Bot Telegram (tsx src/bot/index.ts) — pm2 seo-bot en prod
 npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — simulation par défaut, -- --apply écrit
 npm run gsc-sync       # Search Console → gsc_positions (-- --site=vtc, -- --backfill, -- --trigger=…)
+npm run competitors    # Module Concurrents : SERP + liens + pages des concurrents (simulation ; -- --apply, --site=, --suggest)
 npm run audit          # Audit GSC hebdomadaire (tsx src/jobs/weekly-gsc-audit.ts)
 npm run cluster        # Clustering des mots-clés découverts (tsx src/jobs/weekly-clustering.ts)
 npm run status         # État du système : env, sites actifs, hooks, crons — aucune écriture
@@ -227,6 +260,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 | gsc_positions | Données Search Console | site_key, query, page_url, position, clicks, impressions, ctr |
 | crawl_results | **Faits par URL + funnel d'indexation** (B2) — une ligne par URL et par passage, lire via `v_crawl_latest` (= **le dernier passage du site**, pas le dernier état connu de chaque URL : une URL sortie du périmètre sort du diagnostic) | site_key, url, page_id, expected_state (indexable/redirected/draft/out_of_scope), http_status, redirect_chain, indexable, canonical, in_sitemap, links_in/out, click_depth, content_hash, gsc_verdict/coverage_state/last_crawl, funnel_stage, issues[] |
 | crawl_site_checks | **Ce que le site déclare** — robots.txt et sitemap, une ligne par site et par passage, lire via `v_crawl_site_checks_latest` | site_key, run_id, robots_status/fetched/group/rules/sitemaps/body, sitemap_status/reached/sources/urls[] |
+| competitors · competitor_serp · competitor_snapshots | **Module Concurrents** (faits, job `competitors-scan`) — lire via `v_competitor_serp_latest` / `v_competitor_snapshots_latest` (dernier passage du site) ; migration `migration-competitors.sql` | competitors : site_key, domain, kind (direct/annuaire/reseau), status (suggested/active/ignored), origin, serp_hits · competitor_serp : run_id, query, query_source, impressions, position, type (organic/local_pack), domain, url, rating, votes, is_ours · competitor_snapshots : domain, is_self, sitemap_urls[], new_urls[], referring_domains(_clean), backlink_rank, domain_first_seen, referring (JSONB classé), page_facts (JSONB par URL), serp_top10, serp_avg_pos, pack_hits, rating, votes |
 | generation_jobs | **Progression d'un brief ou d'une génération** (dashboard, `/api/jobs`) — étapes horodatées écrites par la route, lues en polling ; le résultat survit à une connexion coupée | kind (brief/page), site_key, page_id, cluster_id, status (running/success/error), steps[] (key, label, status, started_at, ended_at, note), result, error |
 | optimization_queue | File d'optimisation | page_id, priority, status |
 | automation_logs | Logs des jobs | **job_name**, **action**, site_key, details (JSONB), status, duration_ms |
@@ -250,6 +284,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 ```
 30 6 * * *   Sync GSC → gsc_positions (QUOTIDIEN, en tête de chaîne le lundi) — src/jobs/gsc-sync.ts --trigger=cron
 45 6 * * 1   Crawl + funnel d'indexation → crawl_results + crawl_site_checks — scripts/crawl.ts --apply (~1 min/site)
+10 7 * * 1   Concurrents → competitor_serp + competitor_snapshots — src/jobs/competitors-scan.ts --apply (sites opt-in)
 30 7 * * 1   Scan backlog SEO — détecteurs + mesures (curl POST /api/backlog/scan sur le dashboard pm2)
 0 8 * * 1    Audit GSC hebdomadaire (lundi)
 0 22 * * 0   Clustering keywords hebdomadaire (dimanche)
@@ -354,6 +389,8 @@ VPS         : OVH Ubuntu 24.04
   crawler/issues.ts            → anomalies déterministes selon l'état attendu de l'URL
   crawler/funnel.ts (+ .test)  → étape atteinte dans le funnel d'indexation — testé
   crawler/scope.ts             → slugs hors périmètre SEO (mentions légales, CGV…)
+  competitors/                 → **module Concurrents** : queries (requêtes du site), serp (top 10 localisé), classify (nature des domaines), backlinks, sitemap, page-facts
+  jobs/competitors-scan.ts     → collecte hebdo des faits concurrents (opt-in par site, --suggest)
   gsc/auth.ts                  → authentification GSC (service account)
   gsc/property.ts              → résolution de la propriété (sc-domain: / URL-prefix)
   gsc/inspect.ts               → **API URL Inspection** (scope `webmasters`, pas readonly)

@@ -44,7 +44,11 @@ export interface CrawlOptions {
 }
 
 /** Exécute `task` sur chaque élément, `limit` en vol à la fois, ordre préservé. */
-async function inParallel<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
+export async function inParallel<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T) => Promise<R>,
+): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
 
@@ -85,8 +89,8 @@ function locsOf(xml: string): string[] {
   return [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
 }
 
-/** URL déclarées au sitemap (index de sitemaps compris, un niveau). */
-async function sitemapUrls(
+/** URL déclarées au sitemap (index de sitemaps compris, un niveau). Partagé avec le module Concurrents. */
+export async function sitemapUrls(
   origin: string,
   declared: string[],
 ): Promise<{ urls: Set<string>; error?: string; status: number; sources: string[] }> {
