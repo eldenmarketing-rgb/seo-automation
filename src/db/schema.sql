@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS seo_pages (
   site_key TEXT NOT NULL,
   page_type TEXT NOT NULL CHECK (page_type IN ('service', 'city', 'city_service', 'hub', 'category', 'article', 'product', 'home', 'utility')),
   slug TEXT NOT NULL,
+  -- Page parente (accueil, hub, catégorie) : fixe le préfixe d'URL et la liste qui reprend la page
+  -- côté site (migration-page-parent.sql, 2026-08-30).
+  parent_id UUID REFERENCES seo_pages(id) ON DELETE SET NULL,
   city TEXT,
   service TEXT,
   meta_title TEXT NOT NULL,
