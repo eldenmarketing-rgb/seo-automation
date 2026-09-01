@@ -1,19 +1,33 @@
 /**
  * SERP Competitor Analysis
  *
- * Analyse les pages top 3 de Google pour une requête donnée.
+ * Analyse les pages qui rankent sur Google pour une requête donnée.
  * Extrait : termes manquants, structure (H2), longueur de contenu, FAQ.
  * Injecte les résultats dans le prompt pour que le contenu généré surpasse les concurrents.
+ *
+ * SERP **mobile localisée** (2026-09-01) : même réglage que le module
+ * Concurrents (`src/competitors/serp.ts`) — un internaute à Perpignan pour un
+ * site local, la France pour un site national. L'ancienne SERP France/desktop
+ * comparait nos pages garage à TotalEnergies et ecologie.gouv.fr : des
+ * adversaires qu'un site local n'affronte jamais, et une longueur cible
+ * gonflée par leurs 3 000 mots.
+ *
+ * Seuls les concurrents **comparables** (`serpDomainKind` = direct) nourrissent
+ * l'analyse de contenu et les moyennes ; annuaires, institutions et enseignes
+ * nationales restent listés (l'UI les grise) mais ne dictent rien.
  *
  * Utilise DataForSEO SERP API pour récupérer les résultats Google,
  * puis fetch le contenu des pages pour analyse.
  *
- * Coût : ~0.002$ par requête SERP + temps de fetch des pages.
+ * Coût : ~0.002$ par requête SERP (depth 10 = même bloc tarifaire) + fetch des pages.
  */
 
 import * as logger from '../utils/logger.js';
 import { withDfsCache } from '../dataforseo/cache.js';
 import { env } from '../config/env.js';
+import { serpDomainKind, normalizeDomain } from '../competitors/classify.js';
+import { LOCATION_LOCAL, LOCATION_NATIONAL } from '../competitors/serp.js';
+import type { CompetitorKind } from '../competitors/types.js';
 
 const DATAFORSEO_LOGIN = env.DATAFORSEO_LOGIN ?? '';
 const DATAFORSEO_PASSWORD = env.DATAFORSEO_PASSWORD ?? '';
@@ -99,6 +113,13 @@ export interface SerpCompetitor {
   title: string;
   description: string;
   domain: string;
+  /** `direct` = comparable ; `annuaire`/`reseau` = visible mais hors comparaison ; null = ignoré (social, Google…). */
+  kind: CompetitorKind | null;
+}
+
+export interface SerpOptions {
+  /** SERP vue depuis Perpignan (site local) ou depuis la France (site national). */
+  local?: boolean;
 }
 
 export interface ContentAnalysis {
@@ -147,28 +168,25 @@ export interface SerpInsight {
 
 // ─── SERP Fetch ──────────────────────────────────────────────
 
-async function fetchSerpResults(query: string): Promise<SerpCompetitor[]> {
+async function fetchSerpResults(query: string, local: boolean): Promise<SerpCompetitor[]> {
   if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
     logger.warn('DataForSEO not configured — SERP analysis skipped');
     return [];
   }
 
-  try {
-    const auth = 'Basic ' + Buffer.from(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`).toString('base64');
+  const auth = 'Basic ' + Buffer.from(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`).toString('base64');
+  const endpoint = '/serp/google/organic/live/advanced';
 
-    const endpoint = '/serp/google/organic/live/advanced';
+  const fetchAt = async (location: string): Promise<SerpCompetitor[]> => {
+    // Même vue que le module Concurrents : mobile, localisé. depth 10 pour
+    // qu'après exclusion des annuaires/enseignes il reste des pages à analyser.
     const body = [
-      {
-        keyword: query,
-        location_code: 2250, // France
-        language_code: 'fr',
-        device: 'desktop',
-        depth: 5, // Top 5 seulement
-      },
+      { keyword: query, location_name: location, language_code: 'fr', device: 'mobile', depth: 10 },
     ];
 
     // Chaque brief déclenchait une SERP payante, même sur une requête déjà
-    // achetée la veille. Cache 7 jours (W0.3).
+    // achetée la veille. Cache 7 jours (W0.3) — clé = corps de l'appel, donc
+    // l'éclaireur et le brief qui suit retombent sur la même entrée.
     const data = await withDfsCache<any>(endpoint, body, async () => {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
@@ -179,17 +197,30 @@ async function fetchSerpResults(query: string): Promise<SerpCompetitor[]> {
     });
 
     const items = data.tasks?.[0]?.result?.[0]?.items || [];
-
     return items
       .filter((item: any) => item.type === 'organic')
-      .slice(0, 3)
-      .map((item: any) => ({
-        position: item.rank_absolute || 0,
-        url: item.url || '',
-        title: item.title || '',
-        description: item.description || '',
-        domain: item.domain || '',
-      }));
+      .map((item: any) => {
+        const domain = normalizeDomain(item.domain || item.url || '');
+        return {
+          position: item.rank_absolute || 0,
+          url: item.url || '',
+          title: item.title || '',
+          description: item.description || '',
+          domain,
+          kind: domain ? serpDomainKind(domain) : null,
+        };
+      });
+  };
+
+  try {
+    const results = await fetchAt(local ? LOCATION_LOCAL : LOCATION_NATIONAL);
+    // Une localisation refusée ou une SERP vide ne doit pas faire perdre la
+    // requête : repli France, en le disant (même filet que competitors/serp.ts).
+    if (results.length === 0 && local) {
+      logger.warn(`SERP « ${query} » vide en localisé ${LOCATION_LOCAL} — repli France`);
+      return await fetchAt(LOCATION_NATIONAL);
+    }
+    return results;
   } catch (e) {
     logger.error(`SERP fetch failed for "${query}": ${(e as Error).message}`);
     return [];
@@ -306,26 +337,38 @@ async function analyzePageContent(url: string): Promise<ContentAnalysis | null> 
  * Analyse complète de la SERP pour une requête.
  * Retourne un bloc prêt à injecter dans le prompt.
  */
-export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight | null> {
-  logger.info(`SERP analysis for: "${query}"`);
+export async function analyzeSerpForPrompt(
+  query: string,
+  opts: SerpOptions = {},
+): Promise<SerpInsight | null> {
+  const local = opts.local ?? false;
+  logger.info(`SERP analysis for: "${query}" (${local ? 'localisé Perpignan' : 'France'}, mobile)`);
 
-  // 1. Récupérer les résultats SERP
-  const competitors = await fetchSerpResults(query);
+  // 1. Récupérer les résultats SERP (top 10, avec la nature de chaque domaine)
+  const competitors = await fetchSerpResults(query, local);
   if (competitors.length === 0) {
     logger.warn(`No SERP results for "${query}"`);
     return null;
   }
 
-  // 2. Analyser le contenu de chaque concurrent
+  // 2. Ne comparer que le comparable : un annuaire, une institution ou une
+  // enseigne nationale ranke avec une autorité qu'un site local n'aura jamais —
+  // leur longueur et leur structure ne disent rien de ce que NOTRE page doit
+  // faire. S'il n'y a aucun concurrent direct, on retombe sur le top brut
+  // plutôt que de rendre un brief sans SERP, et le bloc prompt le dit.
+  const direct = competitors.filter((c) => c.kind === 'direct');
+  const comparableOnly = direct.length > 0;
+  const toAnalyze = (comparableOnly ? direct : competitors).slice(0, 3);
+
   const analyses: ContentAnalysis[] = [];
-  for (const comp of competitors.slice(0, 3)) {
+  for (const comp of toAnalyze) {
     const analysis = await analyzePageContent(comp.url);
     if (analysis) analyses.push(analysis);
   }
 
   if (analyses.length === 0) return null;
 
-  // 3. Calculer les insights
+  // 3. Calculer les insights — uniquement sur les pages analysées
   const avgWordCount = Math.round(analyses.reduce((sum, a) => sum + a.wordCount, 0) / analyses.length);
 
   // Termes communs aux concurrents (apparaissent chez 2+ concurrents)
@@ -338,7 +381,10 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
   // « Manquants » = absents de NOTRE requête. Sans ce filtre, « massage » et
   // « perpignan » étaient réclamés comme termes à intégrer sur la requête
   // « massage intuitif perpignan » — et le rédacteur les sur-répétait.
-  const queryNorm = query.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const queryNorm = query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
   const missingTerms = [...termFreq.entries()]
     .filter(([term, count]) => count >= 2 && !queryNorm.includes(term.replace(/s$/, '')))
     .sort((a, b) => b[1] - a[1])
@@ -366,12 +412,13 @@ export async function analyzeSerpForPrompt(query: string): Promise<SerpInsight |
   // 4. Construire le bloc prompt
   const promptBlock = buildSerpPromptBlock(
     query,
-    competitors,
+    toAnalyze,
     analyses,
     missingTerms,
     avgWordCount,
     recommendedStructure,
     structure,
+    comparableOnly,
   );
 
   return {
@@ -394,15 +441,20 @@ function buildSerpPromptBlock(
   avgWordCount: number,
   structure: string[],
   shape: SerpStructure,
+  comparableOnly: boolean,
 ): string {
   const parts: string[] = [];
 
-  parts.push(`═══ ANALYSE CONCURRENTIELLE (TOP 3 GOOGLE pour "${query}") ═══`);
+  parts.push(`═══ ANALYSE CONCURRENTIELLE (concurrents comparables pour "${query}") ═══`);
+  if (!comparableOnly) {
+    parts.push(
+      `(Aucun concurrent direct dans le top 10 — la SERP est tenue par des annuaires, institutions ou enseignes nationales. Faits donnés à titre indicatif, ne cherche pas à les égaler en volume.)`,
+    );
+  }
   parts.push('');
 
-  for (let i = 0; i < Math.min(competitors.length, 3); i++) {
-    const comp = competitors[i];
-    const analysis = analyses[i];
+  for (const comp of competitors.slice(0, 3)) {
+    const analysis = analyses.find((a) => a.url === comp.url);
     parts.push(`#${comp.position} — ${comp.domain}`);
     parts.push(`  Title : "${comp.title}"`);
     if (analysis) {
@@ -443,7 +495,7 @@ function buildSerpPromptBlock(
 
   parts.push('');
   parts.push(
-    `OBJECTIF : Ton contenu doit être PLUS complet, MIEUX structuré et PLUS utile que les 3 premiers résultats ci-dessus.`,
+    `OBJECTIF : Ton contenu doit être PLUS complet, MIEUX structuré et PLUS utile que les pages ci-dessus.`,
   );
 
   return parts.join('\n');
@@ -453,13 +505,17 @@ function buildSerpPromptBlock(
  * Version légère : juste les termes manquants, sans fetcher les pages.
  * Moins coûteux, utilisable dans le daily-generate pour enrichir les prompts.
  */
-export async function quickSerpTerms(query: string): Promise<string[]> {
-  const competitors = await fetchSerpResults(query);
+export async function quickSerpTerms(query: string, opts: SerpOptions = {}): Promise<string[]> {
+  const competitors = await fetchSerpResults(query, opts.local ?? false);
   if (competitors.length === 0) return [];
+
+  // Mêmes règles que l'analyse complète : le vocabulaire vient des comparables.
+  const direct = competitors.filter((c) => c.kind === 'direct');
+  const pool = direct.length > 0 ? direct : competitors;
 
   // Extraire les termes depuis les descriptions SERP uniquement (pas de fetch)
   const allTerms: string[] = [];
-  for (const comp of competitors) {
+  for (const comp of pool) {
     const text = `${comp.title} ${comp.description}`
       .toLowerCase()
       .normalize('NFD')

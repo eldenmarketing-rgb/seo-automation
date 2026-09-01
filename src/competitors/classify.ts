@@ -31,7 +31,7 @@ const RULES: Array<[DomainCategory, RegExp]> = [
   ],
   [
     'plateforme',
-    /planity|fresha|doctolib|treatwell|tripadvisor|thefork|lafourchette|ubereats|deliveroo|leboncoin|lacentrale|autoscout24|paruvendu|aramisauto|booking|airbnb|amazon|cdiscount|shopify|wixsite|jimdosite|allocab|montransport|taxiproxi|itaxis|groupito|blablacar|kiwitaxi|taxi2airport|mytaxi|freenow/,
+    /planity|fresha|doctolib|treatwell|tripadvisor|thefork|lafourchette|ubereats|deliveroo|carbu\.com|zagaz|leboncoin|lacentrale|autoscout24|paruvendu|aramisauto|booking|airbnb|amazon|cdiscount|shopify|wixsite|jimdosite|allocab|montransport|taxiproxi|itaxis|groupito|blablacar|kiwitaxi|taxi2airport|mytaxi|freenow/,
   ],
   [
     'presse',
@@ -47,7 +47,7 @@ const RULES: Array<[DomainCategory, RegExp]> = [
 
 /** Enseignes et réseaux nationaux : visibles dans la SERP, hors comparaison. */
 const RESEAUX =
-  /(^|\.)(norauto|speedy|midas|feuvert|point-s|points|euromaster|vulco|carglass|mondialparebrise|franceparebrise|motrio|eurorepar|boschcarservice|ad\.fr|autodistribution|renault|peugeot|citroen|dacia|toyota|ford|volkswagen|bmw|mercedes-benz|audi|kia|hyundai|nissan|opel|fiat|seat|skoda|mcdonalds|dominos|pizzahut|kfc|burgerking|uber|bolt|heetch|g7|leclerc|carrefour|intermarche|auchan|super-u|lidl|nicolas|v-and-b|cavavin|carter-cash|firststop|first-stop|allopneus|re-fap|autosur|dekra|securitest|autovision|roady|siligom|profil-plus|1001pneus|123pneus|oscaro|mister-auto|yakarouler|autobacs|maxauto)\.(com|fr)$/;
+  /(^|\.)(norauto|speedy|midas|feuvert|point-s|points|euromaster|vulco|carglass|mondialparebrise|franceparebrise|motrio|eurorepar|boschcarservice|ad\.fr|autodistribution|renault|peugeot|citroen|dacia|toyota|ford|volkswagen|bmw|mercedes-benz|audi|kia|hyundai|nissan|opel|fiat|seat|skoda|mcdonalds|dominos|pizzahut|kfc|burgerking|uber|bolt|heetch|g7|totalenergies|leclerc|carrefour|intermarche|auchan|super-u|lidl|nicolas|v-and-b|cavavin|carter-cash|firststop|first-stop|allopneus|re-fap|autosur|dekra|securitest|autovision|roady|siligom|profil-plus|1001pneus|123pneus|oscaro|mister-auto|yakarouler|autobacs|maxauto)\.(com|fr)$/;
 
 export function classifyDomain(domain: string): DomainCategory {
   const d = domain.toLowerCase();

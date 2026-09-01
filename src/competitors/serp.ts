@@ -1,11 +1,12 @@
 /**
  * SERP d'une requête — top 10 mobile, organique + pack local.
  *
- * Distinct de `src/serp/competitor-analysis.ts` (desktop, top 5, réservé aux
- * briefs) : ici on veut savoir qui est devant NOUS et si un pack local
- * précède l'organique, pas ce qu'il faut écrire. Sur un site local la SERP
- * est celle d'un internaute à Perpignan — « carrossier » sans ville tapé
- * depuis Paris ne dit rien de notre marché.
+ * Distinct de `src/serp/competitor-analysis.ts` (réservé aux briefs, aligné
+ * depuis le 2026-09-01 sur la même vue mobile localisée) : ici on veut savoir
+ * qui est devant NOUS et si un pack local précède l'organique, pas ce qu'il
+ * faut écrire. Sur un site local la SERP est celle d'un internaute à
+ * Perpignan — « carrossier » sans ville tapé depuis Paris ne dit rien de
+ * notre marché.
  *
  * Passe par `callApi` (cache 7 j pour les SERP) : relancer le job dans la
  * semaine ne repaie rien.
