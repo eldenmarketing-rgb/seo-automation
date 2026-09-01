@@ -267,6 +267,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 | bot_settings | Config par site | site_key, phone, address, horaires (JSONB), promo_text, gbp_link |
 | page_images | Images des pages | site_key, slug, image_type (ai/real/stock), file_path, alt_text |
 | blog_articles | Articles de blog | site_key, slug, title, content, tags[], status (draft/published) |
+| product_categories · products | **Module catalogue des sites CMS** (template site-starter, e-com vitrine tel-only) — RLS anon lit `published` + `sold_out` (servi barré + OutOfStock, jamais 404), `hidden` invisible ; migration `migration-products.sql` | product_categories : site_key, slug, name, description, display_order · products : site_key, slug, category_id, name, description, price, unit, attributes (JSONB), images[], status (published/hidden/sold_out), featured |
 | vehicles | Inventaire voitures | marque, modele, annee, prix, carburant, boite, couleur, photos[] |
 | menu_categories | Catégories menu restaurant | site_key, slug, name, display_order |
 | menu_items | Articles menu restaurant | category_id, name, price, allergens[], is_vegetarian, status |
@@ -455,7 +456,7 @@ VPS         : OVH Ubuntu 24.04
 
 - CTA principal : numéro de téléphone (click-to-call `<a href="tel:...">`)
 - WhatsApp autorisé avec `?text=` pré-rempli uniquement
-- Zéro formulaire de contact sur aucun site
+- Formulaires de contact AUTORISÉS (décision 2026-09-01) — le téléphone reste le CTA principal (call tracking)
 - Numéro visible above the fold sur toutes les pages
 - Pas de chatbot ni widget tiers qui dilue l'attention
 - Un numéro tracké unique par locataire/ville
