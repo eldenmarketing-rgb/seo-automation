@@ -19,6 +19,7 @@ import {
 import { countWords, generateDescription } from '../../vehicles/describe.js';
 import { CAR_IMAGES_DIR, fetchTelegramFile, saveCarPhoto } from '../../vehicles/photos.js';
 import { describePublish, publishSiteChange, waitForLive, type LiveCheck } from '../../vehicles/publish.js';
+import { registerCarPage } from '../../vehicles/register.js';
 
 /**
  * `/voiture` — inventaire des sites concessionnaires, piloté par le client
@@ -294,9 +295,12 @@ async function activeFlow(
  * Relit la page réelle en arrière-plan et prévient le vendeur — c'est la seule
  * preuve qui compte, un hook Vercel qui répond 200 n'en est pas une.
  */
-function verifyOnline(ctx: BotContext, check: LiveCheck, what: string): void {
+function verifyOnline(ctx: BotContext, check: LiveCheck, what: string, after?: () => Promise<unknown>): void {
   void waitForLive(check).then(async (r) => {
     const secs = Math.round(r.elapsedMs / 1000);
+    // La page est prouvée en ligne : elle peut entrer à l'inventaire (seo_pages) telle qu'elle est servie.
+    if (r.ok && after)
+      await after().catch((e) => logger.warn(`Inscription seo_pages : ${(e as Error).message}`));
     try {
       await ctx.reply(
         r.ok
@@ -481,7 +485,7 @@ async function applyModif(
   await ctx.reply(`✏️ <b>${escapeHtml(carLabel(car))}</b> — ${escapeHtml(what)}\n${describePublish(r)}`, {
     parse_mode: 'HTML',
   });
-  if (r.pushed && r.deploy !== 'none') verifyOnline(ctx, check, what);
+  if (r.pushed && r.deploy !== 'none') verifyOnline(ctx, check, what, () => registerCarPage(site, car.slug));
 }
 
 async function askField(ctx: BotContext, field: ModifField): Promise<void> {
@@ -846,7 +850,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         { parse_mode: 'HTML' },
       );
       if (r.pushed && r.deploy !== 'none') {
-        verifyOnline(ctx, liveCheck.hasText(carUrl(site, slug), carLabel(record)), 'fiche en ligne');
+        verifyOnline(ctx, liveCheck.hasText(carUrl(site, slug), carLabel(record)), 'fiche en ligne', () =>
+          registerCarPage(site, slug),
+        );
       }
     } catch (e) {
       await ctx.reply(`❌ Erreur: ${escapeHtml((e as Error).message)}`);
@@ -897,6 +903,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         ctx,
         disponible ? liveCheck.lacksText(url, '[VENDU]') : liveCheck.hasText(url, '[VENDU]'),
         disponible ? 'fiche remise en vente' : 'fiche marquée vendue',
+        () => registerCarPage(site, slug),
       );
     }
   }
@@ -924,7 +931,9 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     const r = await publishSiteChange(site, `Remove vehicle: ${slug}`);
     await ctx.reply(`🗑️ <b>${slug}</b> supprimé !\n${describePublish(r)}`, { parse_mode: 'HTML' });
     if (r.pushed && r.deploy !== 'none')
-      verifyOnline(ctx, liveCheck.gone(carUrl(site, slug)), 'fiche retirée');
+      verifyOnline(ctx, liveCheck.gone(carUrl(site, slug)), 'fiche retirée', () =>
+        registerCarPage(site, slug, { removed: true }),
+      );
   });
 
   bot.callbackQuery('voiture_action_cancel', async (ctx) => {

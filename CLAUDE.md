@@ -234,6 +234,11 @@ La gestion SEO se fait via le dashboard.
   conformes, 4 min max, puis « ✅ Vérifié en ligne » ou alerte) ; session **par utilisateur et par chat**
   (`getSessionKey`), brouillon expiré après 30 min, « annuler » à tout moment ; `/produit` passe par la même
   chaîne de publication. Le ping `google.com/ping?sitemap=` (service fermé, 404) est retiré partout.
+  **Phase 3 (2026-09-03)** : après la preuve de mise en ligne, `registerCarPage` (`src/vehicles/register.ts`)
+  inscrit ou met à jour la fiche dans `seo_pages` (`vehicules/<slug>`, `product`, `external`, parent = page
+  `vehicules`) avec **le titre, le H1 et la meta lus sur la page servie**, jamais le brouillon ; une fiche
+  supprimée est notée dans `content.imported.removedAt` (l'historique interdit l'effacement, le crawl du lundi
+  verra le 404, la redirection reste une décision admin). Inventaire Okaz importé le même jour (10 pages).
 - `/produit` → écrit `data/catalogue.ts`, commit git, Vercel deploy
 
 ### Permissions
