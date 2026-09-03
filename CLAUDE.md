@@ -239,6 +239,14 @@ La gestion SEO se fait via le dashboard.
   `vehicules`) avec **le titre, le H1 et la meta lus sur la page servie**, jamais le brouillon ; une fiche
   supprimée est notée dans `content.imported.removedAt` (l'historique interdit l'effacement, le crawl du lundi
   verra le 404, la redirection reste une décision admin). Inventaire Okaz importé le même jour (10 pages).
+- **Rubrique Conseils depuis le dashboard (2026-09-03)** : une page `article` dont le slug commence par `conseils/`
+  est publiée sur un site en mode fichiers par `src/deployers/inject-articles.ts` (branché dans `injectPages`,
+  quel que soit le site, si `data/articles.ts` existe) : corps markdown assemblé (intro + `## section`), liens
+  vers une route inexistante retirés (routes = `app/` + `vehicules/<slug>` de `cars.ts` + articles existants),
+  FAQ, `title` = H1, `metaTitle` = meta title sans le suffixe du site, `dateMaj` si le slug existe déjà.
+  Catégorie rattachée et image de couverture viennent du bloc « Article — rubrique Conseils » de l'éditeur
+  (`content.article`). Ideo Car rend `metaTitle` (commit `cc586f7`). Profils voitures/okaz corrigés
+  (`data/cars.ts`, plus de `cities.ts`).
 - `/produit` → écrit `data/catalogue.ts`, commit git, Vercel deploy
 
 ### Permissions

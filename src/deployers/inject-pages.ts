@@ -2,6 +2,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { sites, SiteConfig } from '../../config/sites.js';
 import { SeoPageRow } from '../db/supabase.js';
 import * as logger from '../utils/logger.js';
+import { injectArticles } from './inject-articles.js';
+import { parseCarsFile } from '../vehicles/cars-file.js';
 
 /**
  * Extract existing slugs from a site's data files to avoid regenerating existing pages.
@@ -35,8 +37,9 @@ export function getExistingSlugsFromFiles(siteKey: string): string[] {
       filesToScan.push(`${site.projectPath}/data/blog.ts`);
       break;
     case 'voitures':
+    case 'okaz':
       filesToScan.push(`${site.projectPath}/data/cars.ts`);
-      filesToScan.push(`${site.projectPath}/data/cities.ts`);
+      filesToScan.push(`${site.projectPath}/data/articles.ts`);
       break;
   }
 
@@ -78,23 +81,41 @@ export async function injectPages(siteKey: string, pages: SeoPageRow[]): Promise
     pages.map((p) => p.slug),
   );
 
-  switch (site.dataStrategy) {
-    case 'data-files':
-      if (siteKey === 'garage') return injectGaragePages(site, pages);
-      if (siteKey === 'vtc') return injectVtcPages(site, pages);
-      if (siteKey === 'voitures') return injectVoituresPages(site, pages);
-      if (siteKey === 'restaurant') return injectRestaurantPages(site, pages);
-      throw new Error(
-        `Aucun écrivain de fichiers pour "${siteKey}" : data_strategy vaut "data-files" mais rien ne sait ` +
-          `écrire dans ${site.serviceDataFile || 'ses fichiers de données'}.`,
-      );
-    case 'config-only':
-      return injectCarrosseriePages(site, pages);
-    case 'create-dynamic':
-      return injectMassagePages(site, pages);
-    default:
-      throw new Error(`Stratégie de publication inconnue pour "${siteKey}" : ${site.dataStrategy}`);
+  // Les fiches véhicules sont des routes `vehicules/<slug>` (data/cars.ts) :
+  // un article qui les lie ne doit pas les voir mortes.
+  const carsFile = `${site.projectPath}/data/cars.ts`;
+  if (existsSync(carsFile)) {
+    for (const car of parseCarsFile(readFileSync(carsFile, 'utf-8')))
+      routesReelles.add(`vehicules/${car.slug}`);
   }
+
+  // Les articles (rubrique Conseils) ont leur écrivain, quel que soit le site :
+  // le reste des pages suit la stratégie déclarée du site.
+  const articles = pages.filter((p) => p.page_type === 'article');
+  const autres = pages.filter((p) => p.page_type !== 'article');
+  const injectes = articles.length ? injectArticles(site, articles, routesReelles) : [];
+  if (autres.length === 0) return injectes;
+  pages = autres;
+  const suite = await (async (): Promise<string[]> => {
+    switch (site.dataStrategy) {
+      case 'data-files':
+        if (siteKey === 'garage') return injectGaragePages(site, pages);
+        if (siteKey === 'vtc') return injectVtcPages(site, pages);
+        if (siteKey === 'voitures') return injectVoituresPages(site, pages);
+        if (siteKey === 'restaurant') return injectRestaurantPages(site, pages);
+        throw new Error(
+          `Aucun écrivain de fichiers pour "${siteKey}" : data_strategy vaut "data-files" mais rien ne sait ` +
+            `écrire dans ${site.serviceDataFile || 'ses fichiers de données'}.`,
+        );
+      case 'config-only':
+        return injectCarrosseriePages(site, pages);
+      case 'create-dynamic':
+        return injectMassagePages(site, pages);
+      default:
+        throw new Error(`Stratégie de publication inconnue pour "${siteKey}" : ${site.dataStrategy}`);
+    }
+  })();
+  return [...injectes, ...suite];
 }
 
 // ─── GARAGE: Inject city pages + merge service pages ────────
