@@ -8,7 +8,7 @@
 import { env, requireEnv } from '../config/env.js';
 import { Bot, Context, session, SessionFlavor } from 'grammy';
 import * as logger from '../utils/logger.js';
-import { registerAllCommands, ADMIN_ONLY_COMMANDS } from './commands/index.js';
+import { registerAllCommands, ADMIN_ONLY_COMMANDS, BOT_COMMANDS } from './commands/index.js';
 import { checkUptime } from '../monitoring/uptime.js';
 import { isAuthorized, isAdmin } from './permissions.js';
 
@@ -89,10 +89,36 @@ async function uptimeLoop() {
   setTimeout(uptimeLoop, UPTIME_INTERVAL);
 }
 
+/**
+ * Menu « / » de Telegram : les groupes clients ne voient que leurs commandes,
+ * l'admin les voit toutes. Les descriptions viennent du registre, jamais de
+ * BotFather (qui ne connaît pas les sous-commandes et se désynchronise).
+ */
+async function publishCommandMenu(): Promise<void> {
+  const toMenu = (c: (typeof BOT_COMMANDS)[number]) => ({
+    command: c.name,
+    description: c.usage.split(' — ')[1]?.slice(0, 256) || c.name,
+  });
+  try {
+    await bot.api.setMyCommands(BOT_COMMANDS.filter((c) => c.access === 'group').map(toMenu), {
+      scope: { type: 'all_group_chats' },
+    });
+    const adminChat = env.TELEGRAM_CHAT_ID;
+    if (adminChat) {
+      await bot.api.setMyCommands(BOT_COMMANDS.map(toMenu), {
+        scope: { type: 'chat', chat_id: Number(adminChat) },
+      });
+    }
+  } catch (e) {
+    logger.warn(`Menu des commandes non publié : ${(e as Error).message}`);
+  }
+}
+
 logger.info('Starting Telegram bot...');
 bot.start({
   onStart: () => {
     logger.success('Telegram bot is running!');
+    void publishCommandMenu();
     logger.info(`Uptime monitoring active (every ${UPTIME_INTERVAL / 1000}s)`);
     uptimeLoop();
   },

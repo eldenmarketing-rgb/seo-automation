@@ -3,6 +3,7 @@ import type { BotContext } from '../index.js';
 import { isAdmin, getSiteForChat } from '../permissions.js';
 import { sites } from '../../../config/sites.js';
 import { BOT_COMMANDS } from './index.js';
+import { voitureHelp } from './voiture.js';
 
 /** `/help` et `/start` — l'aide admin est dérivée du registre `BOT_COMMANDS`, jamais recopiée. */
 export function registerHelpCommand(bot: Bot<BotContext>) {
@@ -13,19 +14,9 @@ export function registerHelpCommand(bot: Bot<BotContext>) {
     if (!isAdmin(chatId)) {
       const siteKey = getSiteForChat(chatId);
       if (siteKey === 'voitures' || siteKey === 'okaz') {
-        await ctx.reply(
-          `<b>Gestion ${sites[siteKey]?.name ?? siteKey}</b>\n\n` +
-            `/voiture add — Ajouter un véhicule\n` +
-            `/voiture list — Véhicules en vente\n` +
-            `/voiture vendu — Archiver (vendu)\n` +
-            `/voiture dispo — Remettre en vente\n` +
-            `/voiture prix — Modifier le prix\n` +
-            `/voiture suppr — Supprimer un véhicule\n` +
-            `/voiture archives — Véhicules vendus\n` +
-            `/voiture deploy — Redéployer le site\n` +
-            `/help — Cette aide`,
-          { parse_mode: 'HTML' },
-        );
+        await ctx.reply(`${voitureHelp(sites[siteKey]?.name ?? siteKey, false)}\n\n/help\n   Cette aide`, {
+          parse_mode: 'HTML',
+        });
       } else if (siteKey === 'restaurant') {
         await ctx.reply(
           `<b>Gestion Mon Sauveur</b>\n\n` +

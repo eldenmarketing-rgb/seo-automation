@@ -35,16 +35,23 @@ export interface BotCommandDef {
 }
 
 export const BOT_COMMANDS: readonly BotCommandDef[] = [
-  { name: 'help', usage: '/help — Cette aide', access: 'group', register: registerHelpCommand },
+  {
+    name: 'help',
+    usage: '/help — Aide : ce que fait chaque commande',
+    access: 'group',
+    register: registerHelpCommand,
+  },
   {
     name: 'voiture',
-    usage: '/voiture add|list|vendu|prix|suppr|deploy — Véhicules',
+    usage:
+      '/voiture add|list|vendu|prix|suppr|deploy — Gérer les voitures du site (tape /voiture pour le détail)',
     access: 'group',
     register: registerVoitureCommand,
   },
   {
     name: 'produit',
-    usage: '/produit add|list|suppr|dispo|prix|deploy — Catalogue',
+    usage:
+      '/produit add|list|suppr|dispo|prix|deploy — Gérer le catalogue du site (tape /produit pour le détail)',
     access: 'group',
     register: registerProduitCommand,
   },

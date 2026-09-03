@@ -218,7 +218,17 @@ Les commandes IA (`/generate`, `/approve`, `/blog`, `/edit`, `/enrichir`, `/ctr`
 La gestion SEO se fait via le dashboard.
 
 ### Commandes avec écriture fichiers
-- `/voiture` → télécharge photos, écrit `data/cars.ts`, commit git, Vercel deploy
+- `/voiture` → photos en WebP 1280 px, écrit `data/cars.ts`, commit git, déploiement (hook Vercel, ou push GitHub
+  si le site n'a pas de hook — Okaz). Module `src/vehicles/` (2026-09-03) : lecture par **évaluation** de
+  `cars.ts` (plus de regex), marque/modèle/équipements normalisés, slug unique, `dateAjout` à l'ajout et
+  `dateVente` à la vente (sans elle, Ideo Car passe la fiche en noindex le jour même au lieu de 90 j après).
+  **Description** : étape « points forts » (facultative) puis rédaction par le Claude CLI (`src/ai/claude-cli.ts`,
+  forfait Max, file d'attente d'une exécution) à partir des seuls faits saisis + arguments vérifiés du site
+  (`SITE_FACTS` dans `src/vehicles/describe.ts`, jamais le profil marketing) ; 150-250 mots, 3 paragraphes,
+  `checkDescription` refuse toute affirmation non fournie (garantie, CT, carnet…) ; le vendeur garde, refait ou
+  écrit lui-même (≥ 80 mots). Une vente réécrit la fiche au passé, une remise en vente au présent. Un push
+  raté remonte au vendeur (`publishSiteChange`). Le gabarit « auto » de 150 caractères avait laissé 13 fiches
+  Ideo sur 13 hors index (constat 2026-09-03).
 - `/produit` → écrit `data/catalogue.ts`, commit git, Vercel deploy
 
 ### Permissions
@@ -313,7 +323,7 @@ typescript            ^5.7.0    Compilation (strict + noUnusedLocals/Parameters)
 eslint 9 · prettier 3 · vitest 3 · knip 5 · husky 9 · lint-staged   Filet qualité (dev)
 ```
 
-> `pg` et `sharp` retirés (aucun usage hors scripts jetables).
+> `pg` retiré (aucun usage hors scripts jetables). `sharp` ^0.34 réintroduit le 2026-09-03 pour les photos de `/voiture` (WebP 1280 px).
 
 ---
 
@@ -374,6 +384,9 @@ VPS         : OVH Ubuntu 24.04
   bot/index.ts                 → point d'entrée bot (Grammy, sessions, auth middleware, boucle uptime)
   bot/commands/index.ts        → **registre des commandes** (nom, usage, accès) — seul endroit à éditer
   bot/permissions.ts           → admin / groupes clients (TELEGRAM_GROUP_SITES)
+  ai/claude-cli.ts             → rédaction via le Claude CLI (forfait Max), texte pur, sans outils, une exécution à la fois
+  vehicles/                    → **inventaire des sites concessionnaires** : cars-file (lecture/écriture data/cars.ts),
+                                 normalize (marques, modèles, équipements, slug), describe (prompt + garde-fou), photos (WebP), publish (commit/push/deploy)
   sites/registry.ts            → **chargeur unique du registre** (site_profiles → SiteConfig)
   db/client.ts                 → getSupabase() ; pages.ts · gsc.ts · logs.ts · optimization.ts par domaine
   db/supabase.ts               → baril de ré-export (compatibilité des imports)

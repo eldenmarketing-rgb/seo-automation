@@ -144,6 +144,18 @@ export function readEnvByName(name: string | undefined | null): string | undefin
   return raw !== undefined && raw !== '' ? raw : undefined;
 }
 
+/**
+ * Environnement d'un sous-processus Claude CLI : l'env courant sans les clés
+ * Anthropic (la clé API épuisée prendrait le pas sur le login claude.ai du
+ * forfait Max) et avec le HOME du user qui porte ce login.
+ */
+export function childEnvForClaudeCli(): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = { ...process.env, HOME: '/home/ubuntu' };
+  delete child.ANTHROPIC_API_KEY;
+  delete child.ANTHROPIC_AUTH_TOKEN;
+  return child;
+}
+
 /** Inventaire pour `scripts/run.ts` et le diagnostic : jamais les valeurs, seulement présent/absent. */
 export function describeEnv(): Array<{ name: Name; required: boolean; set: boolean; doc: string }> {
   return (Object.keys(SPEC) as Name[]).map((name) => ({
