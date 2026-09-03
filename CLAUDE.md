@@ -228,7 +228,12 @@ La gestion SEO se fait via le dashboard.
   `checkDescription` refuse toute affirmation non fournie (garantie, CT, carnet…) ; le vendeur garde, refait ou
   écrit lui-même (≥ 80 mots). Une vente réécrit la fiche au passé, une remise en vente au présent. Un push
   raté remonte au vendeur (`publishSiteChange`). Le gabarit « auto » de 150 caractères avait laissé 13 fiches
-  Ideo sur 13 hors index (constat 2026-09-03).
+  Ideo sur 13 hors index (constat 2026-09-03). **Phase 2 (2026-09-03)** : `/voiture modif` (prix, km, couleur,
+  motorisation, équipements, description — texte ou « refaire : notes » —, photos ajout/retrait, catégories,
+  accueil) ; **preuve de mise en ligne** après chaque publication (`waitForLive` relit l'URL réelle, 2 lectures
+  conformes, 4 min max, puis « ✅ Vérifié en ligne » ou alerte) ; session **par utilisateur et par chat**
+  (`getSessionKey`), brouillon expiré après 30 min, « annuler » à tout moment ; `/produit` passe par la même
+  chaîne de publication. Le ping `google.com/ping?sitemap=` (service fermé, 404) est retiré partout.
 - `/produit` → écrit `data/catalogue.ts`, commit git, Vercel deploy
 
 ### Permissions

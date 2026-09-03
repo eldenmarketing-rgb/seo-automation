@@ -24,7 +24,13 @@ export type BotContext = Context & SessionFlavor<SessionData>;
 const bot = new Bot<BotContext>(requireEnv('TELEGRAM_BOT_TOKEN'));
 
 // Session middleware
-bot.use(session({ initial: (): SessionData => ({}) }));
+// Session par utilisateur **et** par chat : deux vendeurs du même groupe ont chacun leur brouillon.
+bot.use(
+  session({
+    initial: (): SessionData => ({}),
+    getSessionKey: (ctx) => (ctx.chat && ctx.from ? `${ctx.chat.id}:${ctx.from.id}` : undefined),
+  }),
+);
 
 // Auth middleware — admin + groupes configurés, tout le reste est ignoré en silence
 bot.use(async (ctx, next) => {

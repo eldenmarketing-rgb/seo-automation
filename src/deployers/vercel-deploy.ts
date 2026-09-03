@@ -1,5 +1,4 @@
 import { sites } from '../../config/sites.js';
-import { pingSitemap } from './sitemap-ping.js';
 import * as logger from '../utils/logger.js';
 import { readEnvByName } from '../config/env.js';
 
@@ -33,9 +32,6 @@ export async function triggerDeploy(siteKey: string): Promise<boolean> {
 
     const data = (await res.json()) as { job?: { id?: string } };
     logger.success(`Vercel deploy triggered for ${siteKey} — job: ${data?.job?.id || 'unknown'}`);
-
-    // Ping Google sitemap after successful deploy
-    await pingSitemap(siteKey);
 
     return true;
   } catch (e) {

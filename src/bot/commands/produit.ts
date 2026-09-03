@@ -1,12 +1,11 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { BotContext } from '../index.js';
 import { sites } from '../../../config/sites.js';
-import { triggerDeploy } from '../../deployers/vercel-deploy.js';
+import { publishSiteChange } from '../../vehicles/publish.js';
 import * as logger from '../../utils/logger.js';
 import { canAccessSite } from '../permissions.js';
 import { readFileSync, writeFileSync, mkdirSync, createWriteStream, unlinkSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
 import https from 'https';
 import http from 'http';
 import { env } from '../../config/env.js';
@@ -161,15 +160,6 @@ function injectProduct(draft: ProductDraft, slug: string): void {
   writeFileSync(CATALOGUE_FILE, content, 'utf-8');
 }
 
-function gitCommitAndPush(message: string): void {
-  try {
-    execSync(`cd "${site.projectPath}" && git add -A && git commit -m "${message}"`, { stdio: 'pipe' });
-    execSync(`cd "${site.projectPath}" && git push origin main`, { stdio: 'pipe', timeout: 30000 });
-  } catch (e) {
-    logger.warn(`Git push failed for ${SITE_KEY}: ${(e as Error).message}`);
-  }
-}
-
 export function registerProduitCommand(bot: Bot<BotContext>) {
   bot.command('produit', async (ctx) => {
     const chatId = ctx.chat?.id?.toString() || '';
@@ -295,7 +285,8 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
     if (subcommand === 'deploy') {
       await ctx.reply('🚀 Déploiement en cours...');
-      const ok = await triggerDeploy(SITE_KEY);
+      const ok =
+        (await publishSiteChange(site, 'chore: redéploiement demandé via Telegram')).deploy !== 'none';
       await ctx.reply(ok ? '✅ Déploiement lancé !' : '❌ Échec du déploiement.');
       return;
     }
@@ -315,8 +306,8 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
     if (removeProduct(slug)) {
-      gitCommitAndPush(`Remove product: ${slug}`);
-      const deployed = await triggerDeploy(SITE_KEY);
+      const published = await publishSiteChange(site, `Remove product: ${slug}`);
+      const deployed = published.pushed && published.deploy !== 'none';
       await ctx.reply(
         `🗑️ <b>${slug}</b> supprimé !\n${deployed ? '🚀 Déploiement lancé !' : '⚠️ Déploiement échoué.'}`,
         { parse_mode: 'HTML' },
@@ -331,8 +322,8 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
     if (setProductAvailability(slug, true)) {
-      gitCommitAndPush(`Set available: ${slug}`);
-      const deployed = await triggerDeploy(SITE_KEY);
+      const published = await publishSiteChange(site, `Set available: ${slug}`);
+      const deployed = published.pushed && published.deploy !== 'none';
       await ctx.reply(`🟢 <b>${slug}</b> remis disponible !\n${deployed ? '🚀 Déploiement lancé !' : ''}`, {
         parse_mode: 'HTML',
       });
@@ -403,8 +394,8 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
       injectProduct(draft, slug);
 
       // Git + deploy
-      gitCommitAndPush(`Add product: ${draft.name}`);
-      const deployed = await triggerDeploy(SITE_KEY);
+      const published = await publishSiteChange(site, `Add product: ${draft.name}`);
+      const deployed = published.pushed && published.deploy !== 'none';
 
       await ctx.reply(
         `✅ <b>${draft.name}</b> ajouté !\n\n` +
@@ -477,8 +468,8 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     }
 
     if (updateProductPrice(slug, newPrice)) {
-      gitCommitAndPush(`Update price: ${slug} → ${newPrice}€`);
-      const deployed = await triggerDeploy(SITE_KEY);
+      const published = await publishSiteChange(site, `Update price: ${slug} → ${newPrice}€`);
+      const deployed = published.pushed && published.deploy !== 'none';
       await ctx.reply(`💰 <b>${slug}</b> → ${newPrice}€\n${deployed ? '🚀 Déploiement lancé !' : ''}`, {
         parse_mode: 'HTML',
       });

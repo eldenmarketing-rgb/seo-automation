@@ -62,3 +62,51 @@ export function describePublish(r: PublishResult): string {
   if (r.deploy === 'none') return `⚠️ Poussé sur GitHub mais ${r.error ?? 'déploiement non lancé'}.`;
   return '🚀 Déploiement lancé — en ligne dans 1 à 2 minutes.';
 }
+
+/**
+ * Preuve de mise en ligne : on relit l'URL réelle jusqu'à y voir le changement.
+ *
+ * Un hook Vercel qui répond 200 ne prouve rien (le build peut échouer, le CDN
+ * peut servir l'ancienne page quelques minutes — cf. la revalidation partielle
+ * observée sur les sites CMS). Deux lectures consécutives conformes, espacées,
+ * avant de dire au vendeur « c'est en ligne ».
+ */
+export interface LiveCheck {
+  url: string;
+  /** Vrai quand la page servie reflète le changement. `text` = HTML avec entités et espaces normalisés. */
+  expect: (text: string, status: number) => boolean;
+}
+
+/** Décode ce qu'il faut pour comparer un prix, un nom ou un début de description au HTML rendu. */
+export function normalizeHtml(html: string): string {
+  return html
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/[\u202f\u00a0]/g, ' ');
+}
+
+export async function waitForLive(
+  check: LiveCheck,
+  opts: { timeoutMs?: number; intervalMs?: number; confirmations?: number } = {},
+): Promise<{ ok: boolean; elapsedMs: number; lastStatus: number | null }> {
+  const timeoutMs = opts.timeoutMs ?? 240_000;
+  const intervalMs = opts.intervalMs ?? 15_000;
+  const needed = opts.confirmations ?? 2;
+  const started = Date.now();
+  let streak = 0;
+  let lastStatus: number | null = null;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const res = await fetch(check.url, { headers: { 'Cache-Control': 'no-cache' }, redirect: 'follow' });
+      lastStatus = res.status;
+      const ok = check.expect(normalizeHtml(await res.text()), res.status);
+      streak = ok ? streak + 1 : 0;
+      if (streak >= needed) return { ok: true, elapsedMs: Date.now() - started, lastStatus };
+    } catch {
+      streak = 0;
+    }
+    await new Promise((r) => setTimeout(r, streak > 0 ? Math.min(intervalMs, 8_000) : intervalMs));
+  }
+  return { ok: false, elapsedMs: Date.now() - started, lastStatus };
+}

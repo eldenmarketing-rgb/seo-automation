@@ -81,21 +81,17 @@ export async function requestIndexation(
 ): Promise<{
   google: boolean;
   indexNow: boolean;
-  sitemapPing: boolean;
 }> {
   const site = sites[siteKey];
   if (!site) throw new Error(`Unknown site: ${siteKey}`);
 
   const url = `${site.domain}/${slug}`;
 
-  // Run all 3 methods in parallel
-  const [googleOk, indexNowOk, sitemapOk] = await Promise.all([
-    googleIndexUrl(url),
-    indexNowSubmit(url, siteKey),
-    pingSitemapForUrl(siteKey),
-  ]);
+  // Google Indexing API + IndexNow en parallèle. Le ping sitemap Google
+  // (google.com/ping) est fermé depuis 2023 : retiré le 2026-09-03.
+  const [googleOk, indexNowOk] = await Promise.all([googleIndexUrl(url), indexNowSubmit(url, siteKey)]);
 
-  return { google: googleOk, indexNow: indexNowOk, sitemapPing: sitemapOk };
+  return { google: googleOk, indexNow: indexNowOk };
 }
 
 /**
@@ -146,23 +142,7 @@ export async function requestBulkIndexation(
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  // Ping sitemap once
-  await pingSitemapForUrl(siteKey);
-
   return { total: slugs.length, google: googleCount, indexNow: indexNowCount };
-}
-
-async function pingSitemapForUrl(siteKey: string): Promise<boolean> {
-  const site = sites[siteKey];
-  if (!site) return false;
-
-  const sitemapUrl = `${site.domain}/sitemap.xml`;
-  try {
-    const res = await fetch(`https://www.google.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}`);
-    return res.ok;
-  } catch {
-    return false;
-  }
 }
 
 /** Get the IndexNow key (needs to be served as a text file on each site) */

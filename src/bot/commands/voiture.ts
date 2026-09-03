@@ -18,7 +18,7 @@ import {
 } from '../../vehicles/normalize.js';
 import { countWords, generateDescription } from '../../vehicles/describe.js';
 import { CAR_IMAGES_DIR, fetchTelegramFile, saveCarPhoto } from '../../vehicles/photos.js';
-import { describePublish, publishSiteChange } from '../../vehicles/publish.js';
+import { describePublish, publishSiteChange, waitForLive, type LiveCheck } from '../../vehicles/publish.js';
 
 /**
  * `/voiture` — inventaire des sites concessionnaires, piloté par le client
@@ -32,16 +32,22 @@ import { describePublish, publishSiteChange } from '../../vehicles/publish.js';
  *    fiche du sitemap et la passe en noindex le jour même au lieu de 90 jours après ;
  *  · une vente réécrit la fiche au passé, une remise en vente la réécrit au présent ;
  *  · marque, modèle, équipements normalisés, slug unique, photos en WebP 1280 px ;
- *  · un push GitHub raté remonte au vendeur au lieu d'un faux « ajouté ».
+ *  · un push GitHub raté remonte au vendeur au lieu d'un faux « ajouté » ;
+ *  · après chaque publication, la page réelle est relue jusqu'à y voir le
+ *    changement, et le vendeur reçoit « vérifié en ligne » ou une alerte ;
+ *  · `/voiture modif` corrige n'importe quel champ d'une fiche existante.
  *
  * Un client par site key, un groupe Telegram par client (TELEGRAM_GROUP_SITES) :
- * un client ne peut jamais lire ni modifier l'inventaire d'un autre.
+ * un client ne peut jamais lire ni modifier l'inventaire d'un autre. Les
+ * brouillons sont par utilisateur (deux vendeurs du même groupe ne se marchent
+ * pas dessus) et expirent au bout de 30 minutes.
  */
 const CAR_SITE_KEYS = ['voitures', 'okaz'];
 
 const MAX_PHOTOS = 10;
 /** Description écrite à la main : en dessous, Google ne verra qu'un gabarit de plus. */
 const MIN_MANUAL_WORDS = 80;
+const FLOW_TTL_MS = 30 * 60 * 1000;
 
 function resolveSite(ctx: BotContext): SiteConfig | undefined {
   const chatId = ctx.chat?.id?.toString() || '';
@@ -169,7 +175,13 @@ function buildCategoryKeyboard(selected: string[], siteKey?: string): InlineKeyb
   return kb;
 }
 
-const fr = (n: number | undefined): string => (n ?? 0).toLocaleString('fr-FR');
+const vedetteKeyboard = () =>
+  new InlineKeyboard()
+    .text('🏠 Accueil + Catalogue', 'voiture_vedette:oui')
+    .text('📋 Catalogue uniquement', 'voiture_vedette:non');
+
+const fr = (n: number | undefined): string =>
+  (n ?? 0).toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g, ' ');
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -179,9 +191,15 @@ function carLabel(c: CarRecord): string {
   return `${c.marque} ${c.modele} ${c.annee}`;
 }
 
+function carUrl(site: SiteConfig, slug: string): string {
+  return `${site.domain}/vehicules/${slug}`;
+}
+
 function carButtons(cars: CarRecord[], prefix: string): InlineKeyboard {
   const kb = new InlineKeyboard();
-  for (const c of cars) kb.text(`${carLabel(c)} (${fr(c.prix)}€)`, `${prefix}:${c.slug}`).row();
+  for (const c of cars) {
+    kb.text(`${c.disponible ? '' : '🔴 '}${carLabel(c)} (${fr(c.prix)}€)`, `${prefix}:${c.slug}`).row();
+  }
   kb.text('❌ Annuler', 'voiture_action_cancel');
   return kb;
 }
@@ -215,6 +233,93 @@ function draftSlug(draft: CarDraft): string {
   const record = draftToRecord(draft, '');
   return slugify(`${record.marque}-${record.modele}-${record.annee}`);
 }
+
+/**
+ * Aide de `/voiture`, partagée avec `/help` : chaque commande dit ce qu'elle
+ * fait **pour le vendeur**, pas ce qu'elle fait dans le code. « vendu » est un
+ * geste (la voiture quitte la vitrine, sa page reste avec le bandeau Vendu),
+ * « archives » est une liste (les voitures déjà vendues) — les deux mots se
+ * ressemblaient trop pour un client qui découvre le bot.
+ */
+export function voitureHelp(siteName: string, admin: boolean): string {
+  return (
+    `🚗 <b>Gestion véhicules ${escapeHtml(siteName)}</b>\n\n` +
+    `<b>Au quotidien</b>\n` +
+    `/voiture add\n   Mettre une voiture en ligne : caractéristiques, photos, fiche rédigée pour toi, tu valides avant publication.\n` +
+    `/voiture list\n   Voir toutes les voitures du site, en vente 🟢 ou vendues 🔴.\n` +
+    `/voiture modif\n   Corriger une fiche : prix, kilométrage, couleur, motorisation, équipements, description, photos, catégories, accueil.\n` +
+    `/voiture prix\n   Raccourci pour changer seulement le prix.\n\n` +
+    `<b>Quand une voiture est vendue</b>\n` +
+    `/voiture vendu\n   Marquer une voiture comme vendue : elle quitte la liste des voitures à vendre, sa page reste en ligne avec le bandeau « Vendu » et sa fiche est réécrite au passé.\n` +
+    `/voiture archives\n   Voir la liste des voitures déjà vendues (rien n'est modifié).\n` +
+    `/voiture dispo\n   Remettre en vente une voiture marquée vendue par erreur.\n\n` +
+    `<b>Rarement</b>\n` +
+    `/voiture suppr\n   Effacer une voiture pour de bon, fiche et photos. Préfère « vendu », qui garde la page.\n` +
+    `/voiture deploy\n   Relancer la mise en ligne du site si un changement n'apparaît pas au bout de quelques minutes.\n\n` +
+    `À tout moment, tape "annuler" pour abandonner ce que tu es en train de faire.` +
+    (admin ? `\n\n<b>Admin</b>\n/voiture client\n   Choisir le client sur lequel travailler.` : '')
+  );
+}
+
+function clearFlow(ctx: BotContext): void {
+  ctx.session.awaitingInput = undefined;
+  ctx.session.context = undefined;
+}
+
+function startFlow(
+  ctx: BotContext,
+  awaiting: 'voiture_add' | 'voiture_modif',
+  context: Record<string, unknown>,
+) {
+  ctx.session.awaitingInput = awaiting;
+  ctx.session.context = { ...context, startedAt: Date.now() };
+}
+
+/** Le contexte du flux en cours, ou undefined (et un message) s'il n'y en a pas ou s'il a expiré. */
+async function activeFlow(
+  ctx: BotContext,
+  awaiting: 'voiture_add' | 'voiture_modif',
+): Promise<Record<string, unknown> | undefined> {
+  if (ctx.session.awaitingInput !== awaiting || !ctx.session.context) return undefined;
+  const startedAt = ctx.session.context.startedAt as number | undefined;
+  if (startedAt && Date.now() - startedAt > FLOW_TTL_MS) {
+    clearFlow(ctx);
+    await ctx.reply('⌛ Brouillon expiré (30 minutes sans suite). Relance la commande.');
+    return undefined;
+  }
+  return ctx.session.context;
+}
+
+/**
+ * Relit la page réelle en arrière-plan et prévient le vendeur — c'est la seule
+ * preuve qui compte, un hook Vercel qui répond 200 n'en est pas une.
+ */
+function verifyOnline(ctx: BotContext, check: LiveCheck, what: string): void {
+  void waitForLive(check).then(async (r) => {
+    const secs = Math.round(r.elapsedMs / 1000);
+    try {
+      await ctx.reply(
+        r.ok
+          ? `✅ Vérifié en ligne (${secs} s) — ${what}\n${check.url}`
+          : `⚠️ ${what} : pas encore visible après ${Math.round(secs / 60)} min (HTTP ${r.lastStatus ?? '—'}).\n${check.url}\nRéessaie dans quelques minutes, sinon tape /voiture deploy ou préviens l'administrateur.`,
+      );
+    } catch (e) {
+      logger.warn(`Message de vérification non envoyé : ${(e as Error).message}`);
+    }
+  });
+}
+
+const liveCheck = {
+  hasText: (url: string, needle: string): LiveCheck => ({
+    url,
+    expect: (text, status) => status === 200 && text.includes(needle),
+  }),
+  lacksText: (url: string, needle: string): LiveCheck => ({
+    url,
+    expect: (text, status) => status === 200 && !text.includes(needle),
+  }),
+  gone: (url: string): LiveCheck => ({ url, expect: (_t, status) => status === 404 }),
+};
 
 /** Lance la rédaction, affiche le texte avec les boutons de relecture, ou bascule en saisie manuelle. */
 async function proposeDescription(ctx: BotContext, draft: CarDraft, site: SiteConfig): Promise<void> {
@@ -280,40 +385,15 @@ async function showConfirmation(ctx: BotContext, draft: CarDraft): Promise<void>
   });
 }
 
-/**
- * Aide de `/voiture`, partagée avec `/help` : chaque commande dit ce qu'elle
- * fait **pour le vendeur**, pas ce qu'elle fait dans le code. « vendu » est un
- * geste (la voiture quitte la vitrine, sa page reste avec le bandeau Vendu),
- * « archives » est une liste (les voitures déjà vendues) — les deux mots se
- * ressemblaient trop pour un client qui découvre le bot.
- */
-export function voitureHelp(siteName: string, admin: boolean): string {
-  return (
-    `🚗 <b>Gestion véhicules ${escapeHtml(siteName)}</b>\n\n` +
-    `<b>Au quotidien</b>\n` +
-    `/voiture add\n   Mettre une voiture en ligne : caractéristiques, photos, fiche rédigée pour toi, tu valides avant publication.\n` +
-    `/voiture list\n   Voir toutes les voitures du site, en vente 🟢 ou vendues 🔴.\n` +
-    `/voiture prix\n   Changer le prix d'une voiture en vente.\n\n` +
-    `<b>Quand une voiture est vendue</b>\n` +
-    `/voiture vendu\n   Marquer une voiture comme vendue : elle quitte la liste des voitures à vendre, sa page reste en ligne avec le bandeau « Vendu » et sa fiche est réécrite au passé.\n` +
-    `/voiture archives\n   Voir la liste des voitures déjà vendues (rien n'est modifié).\n` +
-    `/voiture dispo\n   Remettre en vente une voiture marquée vendue par erreur.\n\n` +
-    `<b>Rarement</b>\n` +
-    `/voiture suppr\n   Effacer une voiture pour de bon, fiche et photos. Préfère « vendu », qui garde la page.\n` +
-    `/voiture deploy\n   Relancer la mise en ligne du site si un changement n'apparaît pas au bout de quelques minutes.` +
-    (admin ? `\n\n<b>Admin</b>\n/voiture client\n   Choisir le client sur lequel travailler.` : '')
-  );
-}
-
-function clearFlow(ctx: BotContext): void {
-  ctx.session.awaitingInput = undefined;
-  ctx.session.context = undefined;
-}
-
-/** Réécrit la description d'une fiche existante (vente / remise en vente) ; rend null si le CLI échoue. */
-async function rewriteDescription(site: SiteConfig, car: CarRecord, sold: boolean): Promise<string | null> {
+/** Réécrit la description d'une fiche existante ; rend null si le CLI échoue. */
+async function rewriteDescription(
+  site: SiteConfig,
+  car: CarRecord,
+  sold: boolean,
+  notes = '',
+): Promise<string | null> {
   try {
-    return await generateDescription({ site, car, notes: '', sold });
+    return await generateDescription({ site, car, notes, sold });
   } catch (e) {
     logger.warn(`Réécriture fiche ${car.slug} impossible : ${(e as Error).message}`);
     return null;
@@ -328,6 +408,156 @@ function deleteCarImages(site: SiteConfig, slug: string): void {
     }
   } catch {
     /* pas de dossier photos : rien à retirer */
+  }
+}
+
+/** Prochain numéro de photo libre pour une fiche (les trous ne sont jamais recomblés). */
+function nextPhotoIndex(car: CarRecord): number {
+  const used = car.images.map((p) => parseInt(p.match(/-(\d+)\.\w+$/)?.[1] ?? '0', 10));
+  return Math.max(0, ...used) + 1;
+}
+
+/* ───────────── Modification d'une fiche existante ───────────── */
+
+type ModifField =
+  | 'prix'
+  | 'km'
+  | 'couleur'
+  | 'chevaux'
+  | 'equipements'
+  | 'description'
+  | 'photos'
+  | 'photos_add'
+  | 'categories'
+  | 'vedette';
+
+const FIELD_LABELS: Record<Exclude<ModifField, 'photos_add'>, string> = {
+  prix: '💰 Prix',
+  km: '🛣️ Kilométrage',
+  couleur: '🎨 Couleur',
+  chevaux: '🏎️ Motorisation',
+  equipements: '📋 Équipements',
+  description: '📄 Description',
+  photos: '📸 Photos',
+  categories: '📂 Catégories',
+  vedette: '⭐ Accueil',
+};
+
+function fieldKeyboard(): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  const entries = Object.entries(FIELD_LABELS);
+  entries.forEach(([id, label], i) => {
+    kb.text(label, `voiture_field:${id}`);
+    if (i % 2 === 1) kb.row();
+  });
+  if (entries.length % 2 === 1) kb.row();
+  kb.text('❌ Annuler', 'voiture_confirm_no');
+  return kb;
+}
+
+function currentCar(ctx: BotContext): { site: SiteConfig; car: CarRecord } | undefined {
+  const site = flowSite(ctx);
+  const slug = ctx.session.context?.slug as string | undefined;
+  if (!site || !slug) return undefined;
+  const car = readCars(site.projectPath).find((c) => c.slug === slug);
+  return car ? { site, car } : undefined;
+}
+
+/** Écrit la modification, publie, répond, puis vérifie en ligne. Termine le flux. */
+async function applyModif(
+  ctx: BotContext,
+  site: SiteConfig,
+  car: CarRecord,
+  patch: Partial<CarRecord>,
+  what: string,
+  check: LiveCheck,
+): Promise<void> {
+  clearFlow(ctx);
+  if (!updateCarsFile(site.projectPath, (content) => replaceCar(content, car.slug, patch))) {
+    await ctx.reply(`❌ Véhicule "${car.slug}" non trouvé.`);
+    return;
+  }
+  const r = await publishSiteChange(site, `Update ${car.slug}: ${what}`);
+  await ctx.reply(`✏️ <b>${escapeHtml(carLabel(car))}</b> — ${escapeHtml(what)}\n${describePublish(r)}`, {
+    parse_mode: 'HTML',
+  });
+  if (r.pushed && r.deploy !== 'none') verifyOnline(ctx, check, what);
+}
+
+async function askField(ctx: BotContext, field: ModifField): Promise<void> {
+  const found = currentCar(ctx);
+  if (!found) {
+    clearFlow(ctx);
+    await ctx.reply('❌ Session expirée. Relance /voiture modif.');
+    return;
+  }
+  const { site, car } = found;
+  ctx.session.context!.field = field;
+  const html = { parse_mode: 'HTML' as const };
+  switch (field) {
+    case 'prix':
+      await ctx.reply(`💰 Prix actuel : <b>${fr(car.prix)}€</b>\n\nTape le nouveau prix :`, html);
+      break;
+    case 'km':
+      await ctx.reply(
+        `🛣️ Kilométrage actuel : <b>${fr(car.kilometrage)} km</b>\n\nTape le nouveau kilométrage :`,
+        html,
+      );
+      break;
+    case 'couleur':
+      await ctx.reply(
+        `🎨 Couleur actuelle : <b>${escapeHtml(car.couleur || '—')}</b>\n\nTape la nouvelle couleur :`,
+        html,
+      );
+      break;
+    case 'chevaux':
+      await ctx.reply(
+        `🏎️ Motorisation actuelle : <b>${escapeHtml(String(car.chevaux || '—'))}</b>\n\nTape la nouvelle motorisation (ex: 2.0 HDi 150 ch) :`,
+        html,
+      );
+      break;
+    case 'equipements':
+      await ctx.reply(
+        `📋 Équipements actuels :\n${escapeHtml(car.equipements.join(', ') || '—')}\n\nTape la <b>liste complète</b> des équipements, séparés par des virgules (elle remplace l'ancienne) :`,
+        html,
+      );
+      break;
+    case 'description':
+      await ctx.reply(
+        `📄 Description actuelle (${countWords(car.description)} mots) :\n\n${escapeHtml(car.description)}\n\n` +
+          `Envoie ton nouveau texte (au moins ${MIN_MANUAL_WORDS} mots), ou tape <b>refaire</b> pour une nouvelle rédaction — ` +
+          `tu peux ajouter des précisions après : « refaire : CT ok, distribution faite ».`,
+        html,
+      );
+      break;
+    case 'photos':
+      await ctx.reply(`📸 ${car.images.length} photo(s) sur la fiche.`, {
+        reply_markup: new InlineKeyboard()
+          .text('➕ Ajouter des photos', 'voiture_photos_add')
+          .text('🗑️ Retirer une photo', 'voiture_photos_del')
+          .row()
+          .text('❌ Annuler', 'voiture_confirm_no'),
+      });
+      break;
+    case 'photos_add':
+      ctx.session.context!.draft = { images: [] };
+      await ctx.reply(
+        `📸 Envoie les photos à ajouter (${MAX_PHOTOS - car.images.length} max), puis tape "ok".`,
+      );
+      break;
+    case 'categories':
+      ctx.session.context!.draft = { images: [], categories: car.categorie.filter((c) => c !== 'standard') };
+      await ctx.reply(STEP_PROMPTS.categories, {
+        ...html,
+        reply_markup: buildCategoryKeyboard(car.categorie, site.key),
+      });
+      break;
+    case 'vedette':
+      await ctx.reply(
+        `⭐ Actuellement : <b>${car.enVedette ? "en vedette sur l'accueil" : 'catalogue uniquement'}</b>`,
+        { ...html, reply_markup: vedetteKeyboard() },
+      );
+      break;
   }
 }
 
@@ -414,6 +644,12 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         title: '💰 <b>Quel véhicule modifier ?</b>',
         empty: 'Aucun véhicule.',
       },
+      modif: {
+        filter: () => true,
+        prefix: 'voiture_modif',
+        title: '✏️ <b>Quelle fiche corriger ?</b>',
+        empty: 'Aucun véhicule.',
+      },
       suppr: {
         filter: () => true,
         prefix: 'voiture_del',
@@ -445,13 +681,12 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     }
 
     if (subcommand === 'add') {
-      ctx.session.awaitingInput = 'voiture_add';
-      ctx.session.context = { step: 'marque', draft: { images: [] }, siteKey: site.key };
+      startFlow(ctx, 'voiture_add', { step: 'marque', draft: { images: [] }, siteKey: site.key });
       await ctx.reply(STEP_PROMPTS.marque, { parse_mode: 'HTML' });
       return;
     }
 
-    await ctx.reply(`Commande inconnue: "${subcommand}". Tape /voiture help`);
+    await ctx.reply(`Commande inconnue: "${subcommand}". Tape /voiture pour l'aide.`);
   });
 
   bot.callbackQuery(/^voiture_site:(.+)$/, async (ctx) => {
@@ -473,6 +708,8 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       },
     );
   });
+
+  /* ── Ajout ── */
 
   bot.callbackQuery(/^voiture_fuel:(.+)$/, async (ctx) => {
     const draft = ctx.session.context?.draft as CarDraft | undefined;
@@ -515,20 +752,44 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     const draft = ctx.session.context?.draft as CarDraft | undefined;
     if (!draft) return;
     await ctx.answerCallbackQuery();
+    const cats = draft.categories?.length ? [...draft.categories] : ['standard'];
+    if (ctx.session.awaitingInput === 'voiture_modif') {
+      const found = currentCar(ctx);
+      if (!found) return;
+      const label = cats.map((c) => CATEGORY_LABELS[c] ?? c).join(', ');
+      await applyModif(
+        ctx,
+        found.site,
+        found.car,
+        { categorie: cats },
+        `catégories : ${label}`,
+        liveCheck.hasText(carUrl(found.site, found.car.slug), carLabel(found.car)),
+      );
+      return;
+    }
     ctx.session.context!.step = 'vedette';
-    await ctx.reply(STEP_PROMPTS.vedette, {
-      parse_mode: 'HTML',
-      reply_markup: new InlineKeyboard()
-        .text('🏠 Accueil + Catalogue', 'voiture_vedette:oui')
-        .text('📋 Catalogue uniquement', 'voiture_vedette:non'),
-    });
+    await ctx.reply(STEP_PROMPTS.vedette, { parse_mode: 'HTML', reply_markup: vedetteKeyboard() });
   });
 
   bot.callbackQuery(/^voiture_vedette:(oui|non)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const enVedette = ctx.match![1] === 'oui';
+    if (ctx.session.awaitingInput === 'voiture_modif') {
+      const found = currentCar(ctx);
+      if (!found) return;
+      await applyModif(
+        ctx,
+        found.site,
+        found.car,
+        { enVedette },
+        enVedette ? "affichée sur l'accueil" : "retirée de l'accueil",
+        liveCheck.hasText(carUrl(found.site, found.car.slug), carLabel(found.car)),
+      );
+      return;
+    }
     const draft = ctx.session.context?.draft as CarDraft | undefined;
     if (!draft) return;
-    draft.enVedette = ctx.match![1] === 'oui';
-    await ctx.answerCallbackQuery();
+    draft.enVedette = enVedette;
     ctx.session.context!.step = 'notes';
     await ctx.reply(STEP_PROMPTS.notes, { parse_mode: 'HTML' });
   });
@@ -581,9 +842,12 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         `✅ <b>${escapeHtml(carLabel(record))}</b> ajouté sur ${escapeHtml(site.name)} !\n\n` +
           `💰 ${fr(record.prix)}€ — ${fr(record.kilometrage)} km\n` +
           `📸 ${record.images.length} photo(s) — 📄 ${countWords(record.description)} mots\n` +
-          `🔗 ${site.domain}/vehicules/${slug}\n\n${describePublish(r)}`,
+          `🔗 ${carUrl(site, slug)}\n\n${describePublish(r)}`,
         { parse_mode: 'HTML' },
       );
+      if (r.pushed && r.deploy !== 'none') {
+        verifyOnline(ctx, liveCheck.hasText(carUrl(site, slug), carLabel(record)), 'fiche en ligne');
+      }
     } catch (e) {
       await ctx.reply(`❌ Erreur: ${escapeHtml((e as Error).message)}`);
       logger.error(`Voiture add failed: ${(e as Error).message}`);
@@ -597,7 +861,8 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     await ctx.reply('❌ Annulé.');
   });
 
-  /** Vente / remise en vente : date posée, description réécrite, publication. */
+  /* ── Vente / remise en vente / suppression ── */
+
   async function setAvailability(ctx: BotContext, slug: string, disponible: boolean): Promise<void> {
     const site = await requireSite(ctx);
     if (!site) return;
@@ -626,6 +891,14 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         describePublish(r),
       { parse_mode: 'HTML' },
     );
+    if (r.pushed && r.deploy !== 'none') {
+      const url = carUrl(site, slug);
+      verifyOnline(
+        ctx,
+        disponible ? liveCheck.lacksText(url, '[VENDU]') : liveCheck.hasText(url, '[VENDU]'),
+        disponible ? 'fiche remise en vente' : 'fiche marquée vendue',
+      );
+    }
   }
 
   bot.callbackQuery(/^voiture_vendu:(.+)$/, async (ctx) => {
@@ -636,20 +909,6 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   bot.callbackQuery(/^voiture_dispo:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     await setAvailability(ctx, ctx.match![1], true);
-  });
-
-  bot.callbackQuery(/^voiture_prix:(.+)$/, async (ctx) => {
-    const slug = ctx.match![1];
-    await ctx.answerCallbackQuery();
-    const site = await requireSite(ctx);
-    if (!site) return;
-    const car = readCars(site.projectPath).find((c) => c.slug === slug);
-    ctx.session.awaitingInput = 'voiture_prix';
-    ctx.session.context = { slug, siteKey: site.key };
-    await ctx.reply(
-      `💰 <b>${escapeHtml(car ? carLabel(car) : slug)}</b> — prix actuel : ${fr(car?.prix)}€\n\nTapez le nouveau prix :`,
-      { parse_mode: 'HTML' },
-    );
   });
 
   bot.callbackQuery(/^voiture_del:(.+)$/, async (ctx) => {
@@ -664,6 +923,8 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     deleteCarImages(site, slug);
     const r = await publishSiteChange(site, `Remove vehicle: ${slug}`);
     await ctx.reply(`🗑️ <b>${slug}</b> supprimé !\n${describePublish(r)}`, { parse_mode: 'HTML' });
+    if (r.pushed && r.deploy !== 'none')
+      verifyOnline(ctx, liveCheck.gone(carUrl(site, slug)), 'fiche retirée');
   });
 
   bot.callbackQuery('voiture_action_cancel', async (ctx) => {
@@ -671,11 +932,149 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     await ctx.reply('👌 Annulé.');
   });
 
-  /** Photo compressée ou envoyée en fichier : on garde l'URL Telegram, téléchargée à la confirmation. */
+  /* ── Modification ── */
+
+  bot.callbackQuery(/^voiture_modif:(.+)$/, async (ctx) => {
+    const slug = ctx.match![1];
+    await ctx.answerCallbackQuery();
+    const site = await requireSite(ctx);
+    if (!site) return;
+    const car = readCars(site.projectPath).find((c) => c.slug === slug);
+    if (!car) {
+      await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
+      return;
+    }
+    startFlow(ctx, 'voiture_modif', { slug, siteKey: site.key });
+    await ctx.reply(`✏️ <b>${escapeHtml(carLabel(car))}</b> — que veux-tu corriger ?`, {
+      parse_mode: 'HTML',
+      reply_markup: fieldKeyboard(),
+    });
+  });
+
+  bot.callbackQuery(/^voiture_prix:(.+)$/, async (ctx) => {
+    const slug = ctx.match![1];
+    await ctx.answerCallbackQuery();
+    const site = await requireSite(ctx);
+    if (!site) return;
+    startFlow(ctx, 'voiture_modif', { slug, siteKey: site.key });
+    await askField(ctx, 'prix');
+  });
+
+  bot.callbackQuery(/^voiture_field:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await activeFlow(ctx, 'voiture_modif'))) return;
+    await askField(ctx, ctx.match![1] as ModifField);
+  });
+
+  bot.callbackQuery('voiture_photos_add', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await activeFlow(ctx, 'voiture_modif'))) return;
+    await askField(ctx, 'photos_add');
+  });
+
+  bot.callbackQuery('voiture_photos_del', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await activeFlow(ctx, 'voiture_modif'))) return;
+    const found = currentCar(ctx);
+    if (!found) return;
+    if (found.car.images.length === 0) {
+      await ctx.reply("Cette fiche n'a aucune photo.");
+      return;
+    }
+    const kb = new InlineKeyboard();
+    found.car.images.forEach((p, i) =>
+      kb.text(`Photo ${i + 1} (${p.split('/').pop()})`, `voiture_photo_del:${i}`).row(),
+    );
+    kb.text('❌ Annuler', 'voiture_confirm_no');
+    await ctx.reply('🗑️ Quelle photo retirer ? (la 1re est celle de la vignette)', { reply_markup: kb });
+  });
+
+  bot.callbackQuery(/^voiture_photo_del:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await activeFlow(ctx, 'voiture_modif'))) return;
+    const found = currentCar(ctx);
+    if (!found) return;
+    const { site, car } = found;
+    const index = parseInt(ctx.match![1], 10);
+    const removed = car.images[index];
+    if (!removed) return;
+    const images = car.images.filter((_, i) => i !== index);
+    try {
+      rmSync(join(site.projectPath, 'public', removed));
+    } catch {
+      /* fichier déjà absent */
+    }
+    const file = removed.split('/').pop() ?? removed;
+    await applyModif(
+      ctx,
+      site,
+      car,
+      { images },
+      `photo retirée (${file})`,
+      liveCheck.lacksText(carUrl(site, car.slug), file),
+    );
+  });
+
+  bot.callbackQuery('voiture_mdesc_ok', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await activeFlow(ctx, 'voiture_modif'))) return;
+    const found = currentCar(ctx);
+    const pending = ctx.session.context?.pending as string | undefined;
+    if (!found || !pending) return;
+    await applyModif(
+      ctx,
+      found.site,
+      found.car,
+      { description: pending },
+      `description réécrite (${countWords(pending)} mots)`,
+      liveCheck.hasText(carUrl(found.site, found.car.slug), pending.slice(0, 60)),
+    );
+  });
+
+  bot.callbackQuery('voiture_mdesc_retry', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await activeFlow(ctx, 'voiture_modif'))) return;
+    await proposeRewrite(ctx, (ctx.session.context?.notes as string) || '');
+  });
+
+  /** Réécriture d'une fiche existante : proposition à valider avant publication. */
+  async function proposeRewrite(ctx: BotContext, notes: string): Promise<void> {
+    const found = currentCar(ctx);
+    if (!found) return;
+    await ctx.reply('✍️ Rédaction en cours (30 secondes environ)...');
+    const text = await rewriteDescription(found.site, found.car, !found.car.disponible, notes);
+    if (!text) {
+      await ctx.reply(
+        `⚠️ Le rédacteur ne répond pas. Envoie ton texte toi-même (au moins ${MIN_MANUAL_WORDS} mots).`,
+      );
+      return;
+    }
+    ctx.session.context!.pending = text;
+    ctx.session.context!.notes = notes;
+    await ctx.reply(`📄 <b>Nouvelle description</b> (${countWords(text)} mots)\n\n${escapeHtml(text)}`, {
+      parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard()
+        .text('✅ Publier', 'voiture_mdesc_ok')
+        .text('🔁 Refaire', 'voiture_mdesc_retry')
+        .row()
+        .text('❌ Annuler', 'voiture_confirm_no'),
+    });
+  }
+
+  /* ── Photos (ajout et modification) ── */
+
+  function photosExpected(ctx: BotContext): boolean {
+    if (ctx.session.awaitingInput === 'voiture_add') return ctx.session.context?.step === 'photos';
+    if (ctx.session.awaitingInput === 'voiture_modif') return ctx.session.context?.field === 'photos_add';
+    return false;
+  }
+
   async function collectPhoto(ctx: BotContext, fileId: string): Promise<void> {
     const draft = ctx.session.context?.draft as CarDraft | undefined;
     if (!draft) return;
-    if (draft.images.length >= MAX_PHOTOS) {
+    const already =
+      ctx.session.awaitingInput === 'voiture_modif' ? (currentCar(ctx)?.car.images.length ?? 0) : 0;
+    if (already + draft.images.length >= MAX_PHOTOS) {
       await ctx.reply(`📸 Maximum ${MAX_PHOTOS} photos. Tape "ok" pour continuer.`);
       return;
     }
@@ -687,13 +1086,13 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   }
 
   bot.on('message:photo', async (ctx, next) => {
-    if (ctx.session.awaitingInput !== 'voiture_add' || ctx.session.context?.step !== 'photos') return next();
+    if (!photosExpected(ctx)) return next();
     const photos = ctx.message.photo;
     await collectPhoto(ctx, photos[photos.length - 1].file_id);
   });
 
   bot.on('message:document', async (ctx, next) => {
-    if (ctx.session.awaitingInput !== 'voiture_add' || ctx.session.context?.step !== 'photos') return next();
+    if (!photosExpected(ctx)) return next();
     const doc = ctx.message.document;
     if (!doc.mime_type?.startsWith('image/')) {
       await ctx.reply("📸 Ce fichier n'est pas une image.");
@@ -702,47 +1101,174 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     await collectPhoto(ctx, doc.file_id);
   });
 
-  bot.on('message:text', async (ctx, next) => {
-    if (ctx.session.awaitingInput === 'voiture_prix') {
-      const slug = ctx.session.context?.slug as string;
-      const site = flowSite(ctx);
-      if (!slug || !site) {
-        clearFlow(ctx);
-        await ctx.reply('❌ Session expirée. Relance /voiture prix.');
-        return;
-      }
-      const prix = parseInt(ctx.message.text.replace(/[^\d]/g, ''));
-      if (!prix) {
-        await ctx.reply('❌ Prix invalide. Tape un montant en euros (ex: 8500).');
-        return;
-      }
+  /* ── Saisies texte ── */
+
+  async function handleModifText(ctx: BotContext, text: string): Promise<void> {
+    const found = currentCar(ctx);
+    if (!found) {
       clearFlow(ctx);
-      if (!updateCarsFile(site.projectPath, (content) => replaceCar(content, slug, { prix }))) {
-        await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
-        return;
-      }
-      const r = await publishSiteChange(site, `Price update: ${slug} → ${prix}`);
-      await ctx.reply(`💰 <b>${slug}</b> → ${fr(prix)}€\n${describePublish(r)}`, { parse_mode: 'HTML' });
+      await ctx.reply('❌ Session expirée. Relance /voiture modif.');
       return;
     }
+    const { site, car } = found;
+    const url = carUrl(site, car.slug);
+    const field = ctx.session.context?.field as ModifField | undefined;
+    const lower = text.toLowerCase();
 
-    if (ctx.session.awaitingInput !== 'voiture_add') return next();
-    const step = ctx.session.context?.step as VoitureStep | undefined;
-    const draft = ctx.session.context?.draft as CarDraft | undefined;
-    if (!step || !draft) return next();
+    switch (field) {
+      case 'prix': {
+        const prix = parseInt(text.replace(/[^\d]/g, ''));
+        if (!prix) {
+          await ctx.reply('❌ Prix invalide. Tape un montant en euros (ex: 8500).');
+          return;
+        }
+        await applyModif(
+          ctx,
+          site,
+          car,
+          { prix },
+          `prix ${fr(car.prix)}€ → ${fr(prix)}€`,
+          liveCheck.hasText(url, `${fr(prix)} €`),
+        );
+        return;
+      }
+      case 'km': {
+        const km = parseInt(text.replace(/[^\d]/g, ''));
+        if (isNaN(km)) {
+          await ctx.reply('❌ Kilométrage invalide.');
+          return;
+        }
+        await applyModif(
+          ctx,
+          site,
+          car,
+          { kilometrage: km },
+          `kilométrage → ${fr(km)} km`,
+          liveCheck.hasText(url, `${fr(km)} km`),
+        );
+        return;
+      }
+      case 'couleur':
+        await applyModif(
+          ctx,
+          site,
+          car,
+          { couleur: text },
+          `couleur → ${text}`,
+          liveCheck.hasText(url, text),
+        );
+        return;
+      case 'chevaux':
+        await applyModif(
+          ctx,
+          site,
+          car,
+          { chevaux: text },
+          `motorisation → ${text}`,
+          liveCheck.hasText(url, text),
+        );
+        return;
+      case 'equipements': {
+        const equipements = normalizeEquipements(text.split(/[,;\n]/));
+        await applyModif(
+          ctx,
+          site,
+          car,
+          { equipements },
+          `équipements : ${equipements.join(', ')}`,
+          liveCheck.hasText(url, equipements[0] ?? carLabel(car)),
+        );
+        return;
+      }
+      case 'description': {
+        if (lower.startsWith('refaire')) {
+          await proposeRewrite(ctx, text.slice('refaire'.length).replace(/^[\s:—-]+/, ''));
+          return;
+        }
+        const words = countWords(text);
+        if (words < MIN_MANUAL_WORDS) {
+          await ctx.reply(
+            `❌ ${words} mots : il en faut au moins ${MIN_MANUAL_WORDS}. Complète ton texte, ou tape "refaire".`,
+          );
+          return;
+        }
+        await applyModif(
+          ctx,
+          site,
+          car,
+          { description: text },
+          `description (${words} mots)`,
+          liveCheck.hasText(url, text.slice(0, 60)),
+        );
+        return;
+      }
+      case 'photos_add': {
+        const draft = ctx.session.context?.draft as CarDraft | undefined;
+        if (!['ok', 'fin', 'done'].includes(lower) || !draft) {
+          await ctx.reply('📸 Envoie une photo ou tape "ok" quand c\'est fini.');
+          return;
+        }
+        if (draft.images.length === 0) {
+          clearFlow(ctx);
+          await ctx.reply('Aucune photo reçue, rien à changer.');
+          return;
+        }
+        await ctx.reply('⏳ Enregistrement des photos...');
+        const images = [...car.images];
+        let n = nextPhotoIndex(car);
+        for (const src of draft.images) {
+          images.push(await saveCarPhoto(site.projectPath, car.slug, n++, await fetchTelegramFile(src)));
+        }
+        const last = images[images.length - 1].split('/').pop() ?? '';
+        await applyModif(
+          ctx,
+          site,
+          car,
+          { images },
+          `${draft.images.length} photo(s) ajoutée(s)`,
+          liveCheck.hasText(url, last),
+        );
+        return;
+      }
+      default:
+        await ctx.reply('Choisis d\'abord ce que tu veux corriger avec les boutons, ou tape "annuler".');
+    }
+  }
+
+  bot.on('message:text', async (ctx, next) => {
+    const awaiting = ctx.session.awaitingInput;
+    if (awaiting !== 'voiture_add' && awaiting !== 'voiture_modif') return next();
 
     const text = ctx.message.text.trim();
     const lower = text.toLowerCase();
+    if (lower === 'annuler' || lower === 'stop') {
+      clearFlow(ctx);
+      await ctx.reply('❌ Annulé.');
+      return;
+    }
+
+    if (awaiting === 'voiture_modif') {
+      if (!(await activeFlow(ctx, 'voiture_modif'))) return;
+      try {
+        await handleModifText(ctx, text);
+      } catch (e) {
+        clearFlow(ctx);
+        await ctx.reply(`❌ Erreur: ${escapeHtml((e as Error).message)}`);
+        logger.error(`Voiture modif failed: ${(e as Error).message}`);
+      }
+      return;
+    }
+
+    const context = await activeFlow(ctx, 'voiture_add');
+    if (!context) return;
+    const step = context.step as VoitureStep | undefined;
+    const draft = context.draft as CarDraft | undefined;
+    if (!step || !draft) return next();
+
     const goTo = async (next: VoitureStep, extra?: Parameters<typeof ctx.reply>[1]) => {
       ctx.session.context!.step = next;
       await ctx.reply(STEP_PROMPTS[next], { parse_mode: 'HTML', ...extra });
     };
-
-    if (lower === 'annuler' || lower === 'stop') {
-      clearFlow(ctx);
-      await ctx.reply('❌ Ajout annulé.');
-      return;
-    }
 
     switch (step) {
       case 'marque':

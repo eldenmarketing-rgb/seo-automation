@@ -51,7 +51,6 @@ async function pingOne(ctx: BotContext, siteKey: string, slug: string) {
     msg += `URL: ${site.domain}/${slug}\n\n`;
     msg += `Google Indexing API: ${result.google ? '✅' : '⚠️ 403 (normal)'}\n`;
     msg += `IndexNow (Bing): ${result.indexNow ? '✅' : '❌'}\n`;
-    msg += `Sitemap ping: ${result.sitemapPing ? '✅' : '❌'}\n`;
 
     await ctx.reply(msg, { parse_mode: 'HTML' });
   } catch (e) {
