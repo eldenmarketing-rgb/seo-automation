@@ -60,7 +60,16 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 ## SEO Dashboard
 
 **Repo :** `/home/ubuntu/sites/seo-dashboard` (Next.js, même base Supabase)
-**Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`)
+**Accès :** local VPS via pm2 (`pm2 start npm --name "seo-dashboard" -- run start`), servi sur
+`http://<IP du VPS>:3000` (port ouvert, ufw inactif).
+**Connexion (2026-09-06) :** page `/login` + cookie de session signé (HMAC dérivé du mot de passe, 30 j,
+`src/lib/session.ts`, vérifié dans le middleware Edge — API Web uniquement, pas de `crypto` Node).
+Le **Basic Auth reste actif en parallèle** : deux crons appellent `/api/backlog/scan` et
+`/api/backlinks/verify` en `curl -u` (`scripts/setup-crons.sh`), le retirer casserait le scan du lundi.
+Un appel d'API sans session reçoit un 401 JSON, une page une redirection vers `/login?next=`.
+Freins aux essais : délai fixe de 400 ms sur chaque échec (incontournable) + 10 essais/15 min par IP
+(indicatif : `X-Forwarded-For` est fabriquable tant qu'aucun proxy ne le réécrit). **Toujours du HTTP** :
+le mot de passe circule en clair, HTTPS reste à poser.
 **Filet qualité (2026-08-28) :** même dispositif que ce dépôt — `npm run check` (typecheck + lint + format:check),
 husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`.
 
