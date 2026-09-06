@@ -65,11 +65,11 @@ Système d'automatisation SEO pilotant un réseau de 6 sites Next.js locaux cibl
 husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`.
 
 ### Pages
-`/` (plan d'action), `/backlog`, `/gsc`, `/indexation`, `/concurrents`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/sites`.
+`/` (plan d'action), `/backlog`, `/chantiers`, `/gsc`, `/indexation`, `/concurrents`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/sites`.
 `/pipeline` et `/cannibalization` redirigent en 308 vers les onglets de `/pages` (`next.config.ts`).
 
 ### Navigation, périmètre, pagination (2026-08-28)
-- **Nav latérale par étape du workflow** (`src/components/Nav.tsx`) : Décider (Plan, Backlog) · Constater (Search
+- **Nav latérale par étape du workflow** (`src/components/Nav.tsx`) : Décider (Plan, Backlog, Chantiers) · Constater (Search
   Console, Indexation, Concurrents) · Produire (Mots-clés, Clusters, Pages) · Autorité (Backlinks) · Réglages (Sites).
 - **Périmètre site global** (`src/lib/site-scope.tsx`, `useSiteScope()`) : un seul filtre dans la colonne de gauche,
   porté par `?site=` dans l'URL (lien partageable), propagé par la nav, mémorisé en `localStorage`. Les écrans ne
@@ -84,13 +84,36 @@ husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`
   Clusters `new`, Pages `status=todo` (draft + brief_ready + error ; `all` = tout sauf 301), Backlog `new`.
 
 ### API routes
-`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/gsc` (+ `sync` POST), `/api/briefs/prepare` (GET) + `/api/briefs/generate` (POST, overrides), `/api/generate/prompt` (GET
+`/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/tasks` (GET/POST, + `[id]` PATCH/DELETE, + `[id]/promote` POST), `/api/gsc` (+ `sync` POST), `/api/briefs/prepare` (GET) + `/api/briefs/generate` (POST, overrides), `/api/generate/prompt` (GET
 `?page_id=`/`?cluster_id=` — le prompt de génération exact en texte brut, lien « Voir le prompt » dans
 l'éditeur ; assemblage partagé `src/lib/generation-prompt.ts`, prompt intégral aussi loggé dans
 `automation_logs.details.prompt`), `/api/pages/retype` (POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`, `/api/concurrents` (GET `?site=` modèle + verdict, POST ajout ; `[id]` PATCH/DELETE ; `scan` POST = lance `src/jobs/competitors-scan.ts --apply --site=`), `/api/jobs` (POST : crée le journal d'un brief/génération, + `[id]` GET : progression — `job_id` accepté par `/api/briefs/generate` et `/api/generate`)
 
 ### Module Backlog SEO (meilleure prochaine action, multi-sites)
 Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
+
+### Module Chantiers — le carnet de bord (2026-09-06)
+Page `/chantiers` (Décider) + `/api/tasks`, table **`site_tasks`**. Le backlog dit ce que les **données
+détectent** ; les chantiers disent ce que le user a **décidé, promis ou laissé en plan**. Deux listes, deux
+vérités : `runScan` purge et reconstruit `opportunities`, une note forcée en `TECHNICAL_SEO` y disparaîtrait.
+**Aucun job n'écrit dans `site_tasks`.**
+- **Capture** : un champ, toujours vide, tout arrive en `inbox` — classer au moment de la note est ce qui
+  fait abandonner un carnet. Le site vient d'un préfixe (« noia: … ») ou du périmètre de l'écran ;
+  `splitSitePrefix` n'accepte le préfixe que s'il désigne un site connu (sinon « rappeler à 14:30 » partirait
+  sur un site fantôme). Règle **dupliquée** dashboard `src/lib/tasks.ts` ↔ bot `src/bot/commands/note.ts`
+  (les deux écrivent dans la table sans passer l'un par l'autre) — testée côté bot.
+- **`/note` sur Telegram** (admin) : le dashboard tourne en local sur le VPS, donc loin du bureau une idée se
+  notait ailleurs. `/note [site:] texte` capture, `/note` seul liste les chantiers ouverts avec une référence
+  courte, `/note fait <ref>` en clôt un.
+- **États** : `inbox` · `todo` · `doing` · `blocked` · `idea` · `done` · `dropped`. `blocked_by` dit **qui**
+  bloque (client / moi / google…) — la moitié des chantiers en attente le sont sur quelqu'un d'autre.
+  `done_at` s'efface si un chantier rouvre, `blocked_by` si l'état n'est plus « bloqué ».
+- **Pont vers le backlog** : `POST /api/tasks/[id]/promote` écrit dans `opportunities` en `source = 'manual'`
+  (donc survit aux re-scans) et clôt le chantier avec le lien. Écriture directe, pas de fetch interne — le
+  middleware Basic Auth le refuserait.
+- Chaque carte de site porte aussi les faits que l'outil connaît déjà (actions de backlog à traiter,
+  brouillons) : « où j'en suis sur ce site » se répond sans changer d'écran.
+- Amorcé le 2026-09-06 avec 34 chantiers réels (`scripts/oneshot/seed-chantiers.ts`, `source = seed:memoire`).
 
 ### Module Indexation (funnel de découverte)
 Page `/indexation` + `/api/indexation` : lisent **`v_crawl_latest`** (dernier passage du crawler) et
@@ -211,6 +234,7 @@ et `ADMIN_ONLY_COMMANDS` en découlent, rien n'est recopié.
 | /help | Aide contextuelle | Tous |
 | /voiture | Ajout véhicule 12 étapes (photos, data, commit git, deploy) | Groupes voitures/okaz + admin |
 | /produit | Catalogue restaurant (ajout, prix, dispo, commit git, deploy) | Groupe restaurant + admin |
+| /note | Carnet de bord : noter un chantier (`/note` seul = liste, `/note fait <ref>` = clore) | Admin |
 | /status, /seo, /index, /monitor, /ping, /deploy, /phone | Exploitation (pages, GSC, indexation, uptime, Vercel, téléphone) | Admin |
 
 Les commandes IA (`/generate`, `/approve`, `/blog`, `/edit`, `/enrichir`, `/ctr`, `/keywords`,
@@ -282,6 +306,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 | Table | Rôle | Colonnes clés |
 |-------|------|---------------|
 | seo_pages | Pages SEO générées | site_key, slug, city, service, **page_type** (service/city/city_service/hub/category/article/product/home/utility), **parent_id** (page parente : accueil/hub/catégorie — fixe le préfixe d'URL et la liste qui reprend la page côté site ; `src/lib/parents.ts` du dashboard, préfixe **déduit** des pages déjà rattachées, jamais déclaré), content (JSONB, dont `brief.instructions` et **`card`** = titre/accroche/description/badges/featured affichés par le parent), status (draft/published/optimized/error/redirected/brief_ready/**external**), **redirect_to** (cible d'une ligne `redirected`, chemin absolu — servie en redirection permanente par les sites CMS via `getRedirect` quand aucune page publiée ne répond, les 301 de `next.config` passant avant ; RLS anon = `published` + `redirected` ; migration `migration-redirects.sql` 2026-08-30), deployed_revision_id |
+| site_tasks | **Chantiers — le carnet de bord** (ce que le user décide ; aucun job n'y touche) | site_key (nullable = transverse, sans FK), title, body, status (inbox/todo/doing/blocked/idea/done/dropped), blocked_by, pinned, due, source (dashboard/telegram/seed:*), opportunity_id (note promue au backlog), done_at ; migration `migration-site-tasks.sql` |
 | opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
 | seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
 | site_profiles | **Registre des sites — source unique de vérité** | site_key, is_active, name/label/color, domain, gsc_domain, phone/email/adresse, schema_type, scope, **mode (local/thematic/product)**, niche, triage_instructions, delivery_mode + revalidate_url/secret, project_path & fichiers cibles, vercel_hook_env, services (JSONB), seo_keyword_patterns, brand, enabled_intents, content_rules, cocooning, **description_short/description_long** (textes d'inscription annuaires, copiés depuis /backlinks) |
