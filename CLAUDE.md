@@ -149,6 +149,12 @@ Seul geste du dashboard qui peut coûter des positions. **Depuis le 2026-08-30**
 (statut `redirected` + `redirect_to`) : la cible est servie par le site CMS en redirection permanente, et
 renommer une page publiée pose cette ligne automatiquement (dashboard `298cf98`, sites Debarras/Elaya/Garage/
 Mon-Sauveur — Carrosserie exclue).
+**Garde-fou régénération (2026-09-11)** : régénérer une page `published` n'écrit plus dans la page — la
+version générée devient une révision **`pending`** dans `seo_page_revisions` (`proposeRevision`,
+`src/lib/revisions.ts` du dashboard), visible dans l'historique de `/pages/[id]` (« Voir » relit,
+« Appliquer » passe par `/api/pages/[id]/rollback`, seule chaîne qui revalide le CMS et vérifie en
+ligne, puis note la révision `applied`). Avant, la page repassait en `draft` et un site CMS la servait
+en 404 à la purge du cache, avant toute relecture. Brouillons et `brief_ready` gardent l'écriture directe.
 
 ### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
 **Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
