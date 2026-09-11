@@ -309,11 +309,11 @@ async function importGarage(): Promise<ImportedPage[]> {
 async function importRestaurant(): Promise<ImportedPage[]> {
   const projectPath = '/home/ubuntu/sites/Mon-Sauveur';
   const { createRequire } = await import('node:module');
-  const { seoPages, ALL_CITY_LINKS } = createRequire(import.meta.url)(`${projectPath}/data/seo-pages.ts`) as {
+  const { seoPages, ALL_SEO_LINKS } = createRequire(import.meta.url)(`${projectPath}/data/seo-pages.ts`) as {
     seoPages: Array<Record<string, unknown> & { slug: string; h1: string; heroTitle: string }>;
-    ALL_CITY_LINKS: Array<{ slug: string; label: string }>;
+    ALL_SEO_LINKS: Array<{ slug: string; label: string }>;
   };
-  const labels = new Map(ALL_CITY_LINKS.map((l) => [l.slug, l.label]));
+  const labels = new Map(ALL_SEO_LINKS.map((l) => [l.slug, l.label]));
 
   const pages: ImportedPage[] = [];
   for (const [index, p] of seoPages.entries()) {
