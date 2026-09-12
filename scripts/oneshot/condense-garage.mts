@@ -50,6 +50,16 @@ const PLANS: Record<string, { h1: string; plan: string[] }> = {
       'Chez nous : devis écrit avant démontage, véhicule de prêt, et les signes d\'un embrayage bien remplacé — fusion des sections 6, 8 et 9.',
     ],
   },
+  'courroie-distribution-perpignan': {
+    h1: 'Nomme la courroie de distribution.',
+    plan: [
+      'Pourquoi la distribution est critique et les signes d\'une courroie fatiguée (bruit, fissures, fuite de la pompe à eau).',
+      'Quand la remplacer : le carnet fixe un kilométrage et un nombre d\'années, courroie ou chaîne selon le moteur, usage qui accélère l\'usure.',
+      'Le kit complet : courroie, galets, pompe à eau, courroie d\'accessoires — pourquoi tout remplacer ensemble.',
+      'Chez nous : vérification de l\'échéance, devis détaillé gratuit, accord, calage, contrôle, véhicule de prêt selon disponibilité.',
+      'Si elle casse : conséquences pour le moteur (sans chiffre), et comment juger un devis distribution.',
+    ],
+  },
   'injecteurs-perpignan': {
     h1: 'Reprend la formulation « réparation injecteur ».',
     plan: [
