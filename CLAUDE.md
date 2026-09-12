@@ -155,6 +155,14 @@ version générée devient une révision **`pending`** dans `seo_page_revisions`
 « Appliquer » passe par `/api/pages/[id]/rollback`, seule chaîne qui revalide le CMS et vérifie en
 ligne, puis note la révision `applied`). Avant, la page repassait en `draft` et un site CMS la servait
 en 404 à la purge du cache, avant toute relecture. Brouillons et `brief_ready` gardent l'écriture directe.
+**Appliquer reporte les blocs du gabarit (2026-09-12)** : une version générée n'emporte ni les 3 étapes
+« Comment ça se passe », ni le bloc pédagogique, ni le sous-titre du hero, le titre du CTA ou le schéma
+Service — clés ajoutées à `PROTECTED_CONTENT_KEYS` (`src/lib/protected-content.ts` du dashboard) et rollback
+passé par `preserveProtectedContent`. **Recette garage validée le 2026-09-12** (5 pages) : corps 1 300-1 500
+mots en 5 sections de 200-250 mots (intertitre + liste), blocs du gabarit produits depuis la même matière,
+Perpignan une fois dans le H1, jamais dans les H2 ni la 1re phrase de l'intro — `scripts/oneshot/condense-garage.mts`
+(condense une révision `pending`), `check-garage-v7.mts` (règles), `apply-garage-v7.mts` (propose + applique
+par `/rollback`). Le gabarit du site rend désormais les titres de section en H2 (Site_Garage `01dc1fd`).
 
 ### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
 **Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
