@@ -3,6 +3,7 @@ import { BotContext } from '../index.js';
 import { sites, SiteConfig } from '../../../config/sites.js';
 import * as logger from '../../utils/logger.js';
 import { canAccessSite, getSiteForChat, isAdmin } from '../permissions.js';
+import { callbackRef, resolveCallbackRef } from '../callback-ref.js';
 import { rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { env } from '../../config/env.js';
@@ -204,10 +205,23 @@ function carUrl(site: SiteConfig, slug: string): string {
 function carButtons(cars: CarRecord[], prefix: string): InlineKeyboard {
   const kb = new InlineKeyboard();
   for (const c of cars) {
-    kb.text(`${c.disponible ? '' : '🔴 '}${carLabel(c)} (${fr(c.prix)}€)`, `${prefix}:${c.slug}`).row();
+    kb.text(
+      `${c.disponible ? '' : '🔴 '}${carLabel(c)} (${fr(c.prix)}€)`,
+      `${prefix}:${callbackRef(c.slug)}`,
+    ).row();
   }
   kb.text('❌ Annuler', 'voiture_action_cancel');
   return kb;
+}
+
+/** Le véhicule désigné par la donnée d'un bouton (référence courte, ou slug brut d'un ancien bouton). */
+function findCarByRef(site: SiteConfig, ref: string): CarRecord | undefined {
+  const cars = readCars(site.projectPath);
+  const slug = resolveCallbackRef(
+    cars.map((c) => c.slug),
+    ref,
+  );
+  return slug ? cars.find((c) => c.slug === slug) : undefined;
 }
 
 /** La fiche complète telle qu'elle sera écrite, à partir du brouillon (sans photos ni description). */
@@ -874,14 +888,15 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
 
   /* ── Vente / remise en vente / suppression ── */
 
-  async function setAvailability(ctx: BotContext, slug: string, disponible: boolean): Promise<void> {
+  async function setAvailability(ctx: BotContext, ref: string, disponible: boolean): Promise<void> {
     const site = await requireSite(ctx);
     if (!site) return;
-    const car = readCars(site.projectPath).find((c) => c.slug === slug);
+    const car = findCarByRef(site, ref);
     if (!car) {
-      await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
+      await ctx.reply(`❌ Véhicule "${ref}" non trouvé.`);
       return;
     }
+    const slug = car.slug;
     await ctx.reply(
       `⏳ ${disponible ? 'Remise en vente' : 'Vente'} de ${carLabel(car)} — réécriture de la fiche...`,
     );
@@ -924,12 +939,12 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   });
 
   bot.callbackQuery(/^voiture_del:(.+)$/, async (ctx) => {
-    const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
     const site = await requireSite(ctx);
     if (!site) return;
-    if (!updateCarsFile(site.projectPath, (content) => removeCar(content, slug))) {
-      await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
+    const slug = findCarByRef(site, ctx.match![1])?.slug;
+    if (!slug || !updateCarsFile(site.projectPath, (content) => removeCar(content, slug))) {
+      await ctx.reply(`❌ Véhicule "${ctx.match![1]}" non trouvé.`);
       return;
     }
     deleteCarImages(site, slug);
@@ -949,16 +964,15 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   /* ── Modification ── */
 
   bot.callbackQuery(/^voiture_modif:(.+)$/, async (ctx) => {
-    const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
     const site = await requireSite(ctx);
     if (!site) return;
-    const car = readCars(site.projectPath).find((c) => c.slug === slug);
+    const car = findCarByRef(site, ctx.match![1]);
     if (!car) {
-      await ctx.reply(`❌ Véhicule "${slug}" non trouvé.`);
+      await ctx.reply(`❌ Véhicule "${ctx.match![1]}" non trouvé.`);
       return;
     }
-    startFlow(ctx, 'voiture_modif', { slug, siteKey: site.key });
+    startFlow(ctx, 'voiture_modif', { slug: car.slug, siteKey: site.key });
     await ctx.reply(`✏️ <b>${escapeHtml(carLabel(car))}</b> — que veux-tu corriger ?`, {
       parse_mode: 'HTML',
       reply_markup: fieldKeyboard(),
@@ -966,11 +980,15 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
   });
 
   bot.callbackQuery(/^voiture_prix:(.+)$/, async (ctx) => {
-    const slug = ctx.match![1];
     await ctx.answerCallbackQuery();
     const site = await requireSite(ctx);
     if (!site) return;
-    startFlow(ctx, 'voiture_modif', { slug, siteKey: site.key });
+    const car = findCarByRef(site, ctx.match![1]);
+    if (!car) {
+      await ctx.reply(`❌ Véhicule "${ctx.match![1]}" non trouvé.`);
+      return;
+    }
+    startFlow(ctx, 'voiture_modif', { slug: car.slug, siteKey: site.key });
     await askField(ctx, 'prix');
   });
 

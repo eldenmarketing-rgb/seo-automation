@@ -4,6 +4,7 @@ import { sites } from '../../../config/sites.js';
 import { publishSiteChange } from '../../vehicles/publish.js';
 import * as logger from '../../utils/logger.js';
 import { canAccessSite } from '../permissions.js';
+import { callbackRef, resolveCallbackRef } from '../callback-ref.js';
 import { readFileSync, writeFileSync, mkdirSync, createWriteStream, unlinkSync } from 'fs';
 import { join } from 'path';
 import https from 'https';
@@ -236,7 +237,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
       let count = 0;
       for (const items of Object.values(grouped)) {
         for (const p of items) {
-          kb.text(`${p.name} (${p.price}€)`, `produit_del:${p.slug}`);
+          kb.text(`${p.name} (${p.price}€)`, `produit_del:${callbackRef(p.slug)}`);
           kb.row();
           count++;
         }
@@ -255,7 +256,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
       const kb = new InlineKeyboard();
       for (const p of products) {
-        kb.text(`${p.name} (${p.price}€)`, `produit_restore:${p.slug}`);
+        kb.text(`${p.name} (${p.price}€)`, `produit_restore:${callbackRef(p.slug)}`);
         kb.row();
       }
       kb.text('❌ Annuler', 'produit_del_cancel');
@@ -275,7 +276,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
       const kb = new InlineKeyboard();
       for (const p of products) {
-        kb.text(`${p.name} (${p.price}€)`, `produit_prix:${p.slug}`);
+        kb.text(`${p.name} (${p.price}€)`, `produit_prix:${callbackRef(p.slug)}`);
         kb.row();
       }
       kb.text('❌ Annuler', 'produit_del_cancel');
@@ -301,11 +302,19 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
     await ctx.reply(`Commande inconnue: "${subcommand}". Tape /produit help`);
   });
 
+  /** Le slug désigné par la donnée d'un bouton (référence courte, ou slug brut d'un ancien bouton). */
+  function productSlugByRef(ref: string): string | undefined {
+    return resolveCallbackRef(
+      getProductsList().map((p) => p.slug),
+      ref,
+    );
+  }
+
   // Delete product button
   bot.callbackQuery(/^produit_del:(.+)$/, async (ctx) => {
-    const slug = ctx.match![1];
+    const slug = productSlugByRef(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    if (removeProduct(slug)) {
+    if (slug && removeProduct(slug)) {
       const published = await publishSiteChange(site, `Remove product: ${slug}`);
       const deployed = published.pushed && published.deploy !== 'none';
       await ctx.reply(
@@ -319,9 +328,9 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
   // Restore product button
   bot.callbackQuery(/^produit_restore:(.+)$/, async (ctx) => {
-    const slug = ctx.match![1];
+    const slug = productSlugByRef(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    if (setProductAvailability(slug, true)) {
+    if (slug && setProductAvailability(slug, true)) {
       const published = await publishSiteChange(site, `Set available: ${slug}`);
       const deployed = published.pushed && published.deploy !== 'none';
       await ctx.reply(`🟢 <b>${slug}</b> remis disponible !\n${deployed ? '🚀 Déploiement lancé !' : ''}`, {
@@ -334,7 +343,7 @@ export function registerProduitCommand(bot: Bot<BotContext>) {
 
   // Price change button — ask for new price
   bot.callbackQuery(/^produit_prix:(.+)$/, async (ctx) => {
-    const slug = ctx.match![1];
+    const slug = productSlugByRef(ctx.match![1]) ?? ctx.match![1];
     await ctx.answerCallbackQuery();
     ctx.session.awaitingInput = 'produit_prix';
     ctx.session.context = { slug };
