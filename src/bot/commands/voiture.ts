@@ -158,11 +158,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   '4x4': '4x4 & SUV',
   'petit-prix': 'Petit Prix',
   sport: 'Sport & Collection',
+  utilitaire: 'Utilitaire',
 };
 
-/** Catégories retirées du site d'un client : plus proposées à l'ajout. */
+/**
+ * Catégories absentes du site d'un client : plus proposées à l'ajout. Une
+ * catégorie que le `CarCategory` du site ne connaît pas casserait son build.
+ */
 const HIDDEN_CATEGORIES: Record<string, string[]> = {
   okaz: ['4x4'], // page /4x4-suv supprimée du site Okaz Autos 66
+  voitures: ['utilitaire'], // Ideo Car n'a pas de page utilitaires (2026-09-15)
 };
 
 function buildCategoryKeyboard(selected: string[], siteKey?: string): InlineKeyboard {
