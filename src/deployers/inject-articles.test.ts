@@ -86,6 +86,17 @@ describe('assembleBody + liens', () => {
     expect(body).toContain('pas la page ville.');
     expect(body).not.toContain('/voitures-pia');
   });
+
+  it('laisse passer une image, dont le chemin n’est pas une route', () => {
+    const body = filtrerLiensMarkdown(
+      'Texte.\n\n![Devant l’agence](/images/conseils/agence.webp)\n\n[mort](/nulle-part)',
+      routes,
+      'test',
+    );
+    expect(body).toContain('![Devant l’agence](/images/conseils/agence.webp)');
+    expect(body).toContain('mort');
+    expect(body).not.toContain('/nulle-part');
+  });
 });
 
 describe('buildArticleEntry', () => {

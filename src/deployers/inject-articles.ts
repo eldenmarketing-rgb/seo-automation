@@ -63,9 +63,12 @@ export function parseArticlesFile(content: string): ArticleEntry[] {
   return value as ArticleEntry[];
 }
 
-/** `[ancre](/chemin)` dont la cible n'est servie par aucune route → texte nu, avec avertissement. */
+/**
+ * `[ancre](/chemin)` dont la cible n'est servie par aucune route → texte nu, avec avertissement.
+ * Une image `![légende](/images/…)` n'est pas un lien : son chemin n'est pas une route, on la laisse.
+ */
 export function filtrerLiensMarkdown(body: string, routes: Set<string>, contexte: string): string {
-  return body.replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, (_m, texte: string, href: string) => {
+  return body.replace(/(?<!!)\[([^\]]+)\]\((\/[^)\s]*)\)/g, (_m, texte: string, href: string) => {
     const cible = href.replace(/^\/+|\/+$/g, '').split(/[#?]/)[0];
     if (cible === '' || routes.has(cible)) return `[${texte}](${href})`;
     logger.warn(`Lien mort retiré (${contexte}) : ${href} n'est servi par aucune route`);
