@@ -28,7 +28,7 @@ const row = {
   scope: "local",
   mode: "local",
   niche:
-    "Plombier à Perpignan : recherche de fuite, débouchage de canalisation, réparation de fuite d'eau, dépannage et remplacement de chauffe-eau, WC et chasse d'eau, installation sanitaire — pages de destination Google Ads + SEO local, rank & rent",
+    "Plombier à Perpignan : recherche de fuite, débouchage de canalisation, réparation de fuite d'eau, dépannage et remplacement de chauffe-eau, WC et chasse d'eau, installation sanitaire, rénovation de plomberie — pages de destination Google Ads + SEO local, rank & rent",
   geo_target:
     "Perpignan et agglomération (66) : Cabestany, Canet-en-Roussillon, Saint-Estève, Bompas, Saleilles, Toulouges, Pollestres, Saint-Cyprien",
   business: "Entreprise de plomberie et de dépannage sanitaire",
@@ -52,7 +52,7 @@ const row = {
     "plombier", "plomberie", "fuite d'eau", "recherche de fuite", "fuite invisible", "dégât des eaux",
     "débouchage", "canalisation bouchée", "évier bouché", "douche bouchée", "wc bouché", "chasse d'eau",
     "chauffe-eau", "ballon d'eau chaude", "cumulus", "groupe de sécurité", "robinet", "mitigeur", "flexible",
-    "siphon", "installation sanitaire", "lavabo", "douche", "lave-linge", "dépannage plomberie", "plombier perpignan",
+    "siphon", "installation sanitaire", "lavabo", "douche", "lave-linge", "rénovation plomberie", "rénovation salle de bain", "remplacement canalisations", "plomb", "galvanisé", "dépannage plomberie", "plombier perpignan",
   ],
   reject_topics: [
     "formation", "emploi", "salaire", "cap", "bts", "fiche métier", "tuto", "bricolage", "leroy merlin", "castorama",
@@ -60,7 +60,7 @@ const row = {
     "piscine", "plombier chauffagiste", "assainissement collectif", "fosse septique", "camion hydrocureur",
   ],
   triage_instructions:
-    "GARDER : toute requête de dépannage ou d'installation de plomberie sanitaire chez un particulier (fuite, recherche de fuite, débouchage, WC, chasse d'eau, chauffe-eau / ballon / cumulus, robinetterie, lavabo, douche, raccordement d'appareils), avec ou sans lieu du 66, et les requêtes prix / tarif / devis / urgence associées. REJETER : formation, emploi, salaire, bricolage et tutoriels, achat de pièces et matériaux (Leroy Merlin, Castorama, Cedeo, Point P), chaudière gaz et chauffage central, climatisation, pompe à chaleur, piscine, assainissement et fosses (camion hydrocureur), requêtes hors 66 sans intention locale.",
+    "GARDER : toute requête de dépannage ou d'installation de plomberie sanitaire chez un particulier (fuite, recherche de fuite, débouchage, WC, chasse d'eau, chauffe-eau / ballon / cumulus, robinetterie, lavabo, douche, raccordement d'appareils, rénovation de la plomberie d'une salle de bain ou d'une cuisine, remplacement de canalisations), avec ou sans lieu du 66, et les requêtes prix / tarif / devis / urgence associées. REJETER : formation, emploi, salaire, bricolage et tutoriels, achat de pièces et matériaux (Leroy Merlin, Castorama, Cedeo, Point P), chaudière gaz et chauffage central, climatisation, pompe à chaleur, piscine, assainissement et fosses (camion hydrocureur), requêtes hors 66 sans intention locale.",
   services: [
     { name: "Recherche de fuite", slug: "prestations/recherche-de-fuite-perpignan", emoji: "🔍", category: "fuites", keywords: ["recherche de fuite perpignan", "fuite d'eau invisible perpignan", "détection fuite perpignan"] },
     { name: "Débouchage canalisation", slug: "prestations/debouchage-canalisation-perpignan", emoji: "🌀", category: "debouchage", keywords: ["débouchage canalisation perpignan", "évier bouché perpignan", "débouchage perpignan"] },
@@ -68,6 +68,7 @@ const row = {
     { name: "Dépannage chauffe-eau", slug: "prestations/depannage-chauffe-eau-perpignan", emoji: "🔥", category: "chauffe-eau", keywords: ["dépannage chauffe-eau perpignan", "remplacement chauffe-eau perpignan", "ballon d'eau chaude perpignan"] },
     { name: "Dépannage WC", slug: "prestations/depannage-wc-perpignan", emoji: "🚽", category: "wc", keywords: ["wc bouché perpignan", "chasse d'eau qui fuit perpignan", "réparation wc perpignan"] },
     { name: "Installation sanitaire", slug: "prestations/installation-sanitaire-perpignan", emoji: "🚿", category: "installation", keywords: ["installation sanitaire perpignan", "remplacement robinet perpignan", "pose lavabo douche perpignan"] },
+    { name: "Rénovation plomberie", slug: "prestations/renovation-plomberie-perpignan", emoji: "🛠️", category: "renovation", keywords: ["rénovation plomberie perpignan", "plomberie salle de bain perpignan", "remplacement canalisations perpignan"] },
   ],
   seo_keyword_patterns: ["plombier {ville}", "{service} {ville}", "dépannage plomberie {ville}"],
   brand: {
@@ -81,7 +82,7 @@ const row = {
     experienceProof:
       "AUCUNE preuve vérifiée : marque du site, téléphone, adresse, SIRET, horaires (et disponibilité soir / week-end), assurances, qualifications, ancienneté, avis, tarifs et zones réellement desservies restent À FOURNIR (docs/A-FOURNIR.md du site). N'inventer aucune preuve, aucun prix, aucun délai d'intervention.",
     uniqueSellingPoints: [
-      "Recherche de fuite, débouchage, réparation de fuite, chauffe-eau, WC et installation sanitaire chez les particuliers",
+      "Recherche de fuite, débouchage, réparation de fuite, chauffe-eau, WC, installation sanitaire et rénovation de plomberie chez les particuliers",
       "Un créneau fixé à l'appel, le diagnostic expliqué et le tarif annoncé avant d'intervenir",
       "La cause traitée, pas seulement le symptôme : pièce en cause remplacée, conseils pour éviter la récidive",
       "Plombier local à Perpignan, interventions dans l'agglomération",

@@ -1,5 +1,5 @@
 /**
- * Brouillons des 6 pages prestation du site Plombier Perpignan (site_key plomberie),
+ * Brouillons des 7 pages prestation du site Plombier Perpignan (site_key plomberie),
  * écrits pour des pages de destination Google Ads : besoin du visiteur (souvent en
  * urgence), ce qui est fait, déroulé, quand faire appel, FAQ, CTA. Aucun fait client
  * (prix, délai d'intervention, disponibilité soir / week-end, garantie, qualification,
@@ -37,6 +37,7 @@ const L = {
   chauffeEau: { url: "/prestations/depannage-chauffe-eau-perpignan", anchor: "Dépannage chauffe-eau", context: "Plus d'eau chaude, fuite au ballon, remplacement." },
   wc: { url: "/prestations/depannage-wc-perpignan", anchor: "Dépannage WC", context: "WC bouché, chasse d'eau qui fuit, mécanisme." },
   sanitaire: { url: "/prestations/installation-sanitaire-perpignan", anchor: "Installation sanitaire", context: "Robinetterie, lavabo, douche, WC, lave-linge." },
+  renovation: { url: "/prestations/renovation-plomberie-perpignan", anchor: "Rénovation plomberie", context: "Salle de bain, canalisations anciennes, nouveaux points d'eau." },
 };
 
 const pages: Page[] = [
@@ -392,6 +393,64 @@ const pages: Page[] = [
       { question: "Combien de temps prend le remplacement d'un lavabo ou d'un WC ?", answer: "Le remplacement d'un équipement par un équivalent se fait dans la journée. Le devis indique la durée prévue pour votre chantier." },
     ],
     links: [L.wc, L.chauffeEau, L.fuite, CONTACT],
+  },
+  {
+    slug: "prestations/renovation-plomberie-perpignan",
+    h1: "Rénovation plomberie Perpignan",
+    meta_title: "Rénovation plomberie Perpignan : salle de bain, canalisations",
+    meta_description:
+      "Refaire la plomberie d'une salle de bain ou d'une cuisine, remplacer des canalisations anciennes, déplacer ou créer des points d'eau à Perpignan et alentours. Visite, devis écrit, chantier propre.",
+    service: "Rénovation plomberie",
+    card: {
+      title: "Rénovation",
+      tagline: "Salle de bain, canalisations anciennes, nouveaux points d'eau",
+      description: "Refaire la plomberie d'une salle de bain ou d'une cuisine, remplacer les canalisations vétustes, déplacer ou créer des arrivées et des évacuations.",
+      badges: ["Perpignan et alentours", "Devis écrit"],
+      featured: false,
+    },
+    intro:
+      "Une salle de bain à refaire entièrement, une baignoire à remplacer par une douche à l'italienne, une cuisine qui change de place, des canalisations en plomb ou en acier galvanisé qui rouillent et réduisent le débit, un appartement ancien à remettre aux normes avant de le louer : la rénovation de plomberie, c'est repartir sur des réseaux sains et posés au bon endroit. Nous rénovons la plomberie des logements à Perpignan et dans les communes voisines, seuls ou avec vos autres artisans.\n\nAppelez-nous et décrivez le projet : nous passons voir l'existant, nous vous conseillons et vous recevez un devis écrit avant tout chantier.",
+    sections: [
+      {
+        title: "Les rénovations que nous réalisons",
+        content:
+          "- **Plomberie d'une salle de bain** refaite à neuf : arrivées d'eau chaude et froide, évacuations, alimentation et vidage de la douche, de la baignoire, du lavabo et des WC, robinetterie encastrée ou apparente.\n- **Remplacement d'une baignoire par une douche**, y compris receveur extra-plat ou douche à l'italienne, avec reprise de l'évacuation et de la pente.\n- **Plomberie d'une cuisine** : déplacement de l'évier, arrivées et évacuations pour lave-vaisselle, lave-linge, frigo américain.\n- **Remplacement des canalisations anciennes** : plomb, acier galvanisé rouillé, cuivre corrodé ou percé, PVC d'évacuation fissuré ; en cuivre, PER ou multicouche selon le cas.\n- **Création de points d'eau** : buanderie, WC supplémentaire, salle d'eau dans une chambre, robinet extérieur.\n- **Mise aux normes** d'un logement ancien avant location ou vente : robinets d'arrêt, clapets, raccords diélectriques, groupe de sécurité, évacuations conformes.\n- **Remplacement du chauffe-eau** dans le cadre de la rénovation : voir notre page [chauffe-eau](/prestations/depannage-chauffe-eau-perpignan).",
+      },
+      {
+        title: "Pourquoi remplacer des canalisations anciennes",
+        content:
+          "Beaucoup de logements de Perpignan construits avant les années 70 ont encore des réseaux d'origine :\n\n- **Le plomb** relargue dans l'eau et n'est plus autorisé pour l'eau potable : son remplacement est la priorité.\n- **L'acier galvanisé** rouille de l'intérieur : débit qui baisse, eau colorée au premier jet, fuites par piqûres, raccords impossibles à démonter.\n- **Le cuivre ancien** peut être corrodé par l'eau calcaire et agressive du secteur ou piqué par des courants parasites.\n- **Les évacuations en fonte ou en PVC ancien** se fissurent, se bouchent et laissent passer les odeurs.\n\nRemplacer ces réseaux pendant une rénovation, quand les murs et les sols sont ouverts, coûte bien moins cher que d'y revenir après. Nous vous disons ce qui doit être changé et ce qui peut rester.",
+      },
+      {
+        title: "Comment se passe un chantier de rénovation",
+        content:
+          "1. **Au téléphone**, vous décrivez le projet : pièce concernée, ce que vous voulez changer, état supposé des réseaux, calendrier.\n2. **Visite** : nous relevons l'existant (matériaux, cheminements, arrivée générale, évacuations, ventilation), nous discutons de l'implantation souhaitée et nous repérons les contraintes du bâti.\n3. **Devis écrit** détaillant les réseaux à refaire, les équipements posés, les fournitures comprises et l'ordre des interventions.\n4. **Chantier en deux temps** : les réseaux d'abord (arrivées, évacuations, essais en pression), avant carrelage et cloisons ; les équipements et la robinetterie ensuite, une fois les revêtements posés.\n5. **Mise en eau, essais et contrôle** de chaque point d'eau et de chaque évacuation, puis nettoyage.\n\nSi vous avez un carreleur, un électricien ou un plaquiste, nous nous calons sur leur planning. Sinon, nous vous disons dans quel ordre faire intervenir chacun.",
+      },
+      {
+        title: "Les choix qui comptent",
+        content:
+          "- **Le matériau des arrivées** : cuivre (durable, apparent possible), PER (souple, encastré en gaine) ou multicouche (rigide, sertissable) ; nous choisissons selon les cheminements et l'accessibilité.\n- **Les diamètres** : suffisants pour alimenter plusieurs points d'eau en même temps sans perte de pression.\n- **Les évacuations** : pente régulière, diamètres adaptés, siphons accessibles, ventilation pour éviter les glouglous et les odeurs.\n- **Les robinets d'arrêt** par pièce et par appareil : couper une seule zone au lieu de tout le logement.\n- **La robinetterie** : encastrée pour une douche épurée, apparente pour un entretien facile ; thermostatique protégée contre le calcaire.\n- **L'accès** : trappes et regards là où un siphon, une vanne ou un raccord devra un jour être atteint.\n\nCes choix se font avec vous à la visite, et le devis les précise.",
+      },
+      {
+        title: "Rénovation de plomberie à Perpignan et alentours",
+        content:
+          `Nous intervenons à Perpignan et dans les communes voisines : ${ZONES} et les communes proches. Pour un autre secteur, appelez-nous.\n\nUne rénovation est aussi le bon moment pour poser une [robinetterie et des sanitaires neufs](/prestations/installation-sanitaire-perpignan) et pour vérifier qu'aucune [fuite ancienne](/prestations/recherche-de-fuite-perpignan) ne se cache dans les murs ouverts.`,
+      },
+    ],
+    highlights: [
+      "Réseaux refaits en cuivre, PER ou multicouche selon le cas",
+      "Plomb et galvanisé remplacés, débit et qualité d'eau retrouvés",
+      "Essais en pression avant fermeture des murs et des sols",
+      "Devis écrit, seuls ou en coordination avec vos autres artisans",
+    ],
+    faq: [
+      { question: "Combien coûte la rénovation de la plomberie d'une salle de bain ?", answer: "Cela dépend de la surface, du nombre de points d'eau, de l'état des réseaux existants, des équipements choisis et de qui les fournit. Nous passons voir l'existant et vous recevez un devis écrit détaillé avant tout chantier." },
+      { question: "Faut-il tout casser pour remplacer les canalisations ?", answer: "Pas toujours. Les arrivées peuvent souvent passer en apparent, en plinthe technique, en faux plafond ou dans une cloison ouverte pour l'occasion. Pendant une rénovation, les murs et sols sont déjà ouverts : c'est le moment le moins coûteux." },
+      { question: "Combien de temps dure le chantier ?", answer: "La partie plomberie d'une salle de bain se fait en deux passages, avant et après les revêtements ; la durée dépend du projet et figure sur le devis. Le calendrier global dépend des autres corps de métier." },
+      { question: "Prenez-vous en charge le carrelage et l'électricité ?", answer: "Non, nous nous concentrons sur la plomberie. Nous travaillons avec vos artisans ou nous vous en recommandons, et nous vous indiquons l'ordre d'intervention pour que le chantier s'enchaîne sans attente." },
+      { question: "Mon logement a des canalisations en plomb, est-ce urgent ?", answer: "Le plomb dans l'eau potable est un risque sanitaire, surtout pour les enfants et les femmes enceintes. Son remplacement est prioritaire par rapport à tout autre travail de plomberie. Nous vérifions sur place quels tronçons sont concernés." },
+    ],
+    links: [L.sanitaire, L.chauffeEau, L.recherche, CONTACT],
   },
 ];
 
