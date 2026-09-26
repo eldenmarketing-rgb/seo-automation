@@ -8,6 +8,7 @@
  *
  *   npx tsx scripts/oneshot/seed-reprog-pages.mts              # crée les brouillons seulement
  *   npx tsx scripts/oneshot/seed-reprog-pages.mts --generate   # + brief + rédaction, en séquence
+ *   npx tsx scripts/oneshot/seed-reprog-pages.mts --generate --force --only=formation/outils   # refaire une page
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -16,6 +17,7 @@ import { getSupabase } from "../../src/db/client";
 const SITE = "reprog";
 const GENERATE = process.argv.includes("--generate");
 const FORCE = process.argv.includes("--force");
+const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
 const DASH = "http://localhost:3000";
 
 const env = readFileSync("/home/ubuntu/sites/seo-dashboard/.env.local", "utf8");
@@ -128,7 +130,7 @@ const pages: Spec[] = [
       { keyword: "kess reprogrammation", volume: 30 },
       { keyword: "autotuner reprogrammation", volume: 70 },
     ],
-    instructions: `Guide du matériel : interfaces de lecture / écriture (Alientech KESS3, Autotuner, et leur logique master / slave), logiciels d'édition (WinOLS, ECM Titanium), outils de diagnostic OBD, banc de puissance ; ce que chacun fait, ordre de prix du marché, abonnements et packs de fichiers, ce qu'il faut acheter en premier et ce qui peut attendre. Préciser ce que la formation fait manipuler sans citer de partenariat ni d'agrément. ${COMMON}`,
+    instructions: `Guide du matériel : interfaces de lecture / écriture (Alientech KESS3, Autotuner, et leur logique master / slave), logiciels d'édition (WinOLS, ECM Titanium), outils de diagnostic OBD, banc de puissance ; ce que chacun fait, ordre de prix du marché, abonnements et packs de fichiers, ce qu'il faut acheter en premier et ce qui peut attendre. Préciser ce que la formation fait manipuler sans citer de partenariat ni d'agrément. LONGUEUR IMPOSÉE : 6 sections maximum, 1 600 à 2 000 mots au total, quelle que soit la longueur des pages concurrentes (ce sont des catalogues produit, pas des guides). ${COMMON}`,
   },
   {
     slug: "devenir-reprogrammateur-automobile",
@@ -157,6 +159,7 @@ const post = (path: string, body: unknown) =>
   );
 
 for (const p of pages) {
+  if (ONLY && p.slug !== ONLY) continue;
   const { data: existing } = await sb.from("seo_pages").select("id, status, content").eq("site_key", SITE).eq("slug", p.slug).maybeSingle();
   let id = existing?.id as string | undefined;
   if (existing?.status === "published") {
