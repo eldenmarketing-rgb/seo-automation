@@ -896,6 +896,14 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       await ctx.reply(`❌ Véhicule "${ref}" non trouvé.`);
       return;
     }
+    // Un ancien clavier reste cliquable dans le chat : sans ce garde-fou, la même
+    // voiture était revendue (fiche réécrite, dateVente repoussée) à chaque clic.
+    if (car.disponible === disponible) {
+      await ctx.reply(
+        `ℹ️ ${carLabel(car)} est déjà ${disponible ? 'en vente' : `marquée vendue${car.dateVente ? ` (le ${car.dateVente})` : ''}`} — rien à faire.`,
+      );
+      return;
+    }
     const slug = car.slug;
     await ctx.reply(
       `⏳ ${disponible ? 'Remise en vente' : 'Vente'} de ${carLabel(car)} — réécriture de la fiche...`,
