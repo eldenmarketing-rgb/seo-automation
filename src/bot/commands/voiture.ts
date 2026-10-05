@@ -9,7 +9,14 @@ import { join } from 'path';
 import { env } from '../../config/env.js';
 import type { CarRecord, FuelType, Transmission } from '../../vehicles/types.js';
 import { todayIso } from '../../vehicles/types.js';
-import { appendCar, readCars, removeCar, replaceCar, updateCarsFile } from '../../vehicles/cars-file.js';
+import {
+  appendCar,
+  readCars,
+  removeCar,
+  replaceCar,
+  setUne,
+  updateCarsFile,
+} from '../../vehicles/cars-file.js';
 import {
   normalizeBrand,
   normalizeEquipements,
@@ -171,6 +178,15 @@ const HIDDEN_CATEGORIES: Record<string, string[]> = {
   voitures: ['utilitaire'], // Ideo Car n'a pas de page utilitaires (2026-09-15)
 };
 
+/**
+ * Sites dont le hero sait afficher un véhicule « à la une » (`/voiture une`). Le champ
+ * `aLaUne` n'est écrit que là : sur un site dont le type `Car` ne le déclare pas, il
+ * casserait le build — c'est ce qui a figé Okaz six jours avec `dateVente` (23/09/2026).
+ */
+const UNE_SITES = ['okaz'];
+const UNE_EMPTY_HINT =
+  "Elle était à la une : l'emplacement est vide, /voiture une pour en choisir une autre.";
+
 function buildCategoryKeyboard(selected: string[], siteKey?: string): InlineKeyboard {
   const hidden = siteKey ? (HIDDEN_CATEGORIES[siteKey] ?? []) : [];
   const kb = new InlineKeyboard();
@@ -200,6 +216,26 @@ function carLabel(c: CarRecord): string {
 
 function carUrl(site: SiteConfig, slug: string): string {
   return `${site.domain}/vehicules/${slug}`;
+}
+
+function homeUrl(site: SiteConfig): string {
+  return `${site.domain}/`;
+}
+
+/** Ce que le hero du site porte quand `slug` est à la une — la preuve relue en ligne. */
+const uneMarker = (slug: string): string => `data-une="${slug}"`;
+
+function uneKeyboard(cars: CarRecord[]): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (const c of cars) {
+    kb.text(
+      `${c.aLaUne ? '⭐ ' : ''}${carLabel(c)} (${fr(c.prix)}€)`,
+      `voiture_une:${callbackRef(c.slug)}`,
+    ).row();
+  }
+  if (cars.some((c) => c.aLaUne)) kb.text('🚫 Retirer la une', 'voiture_une_off').row();
+  kb.text('❌ Annuler', 'voiture_action_cancel');
+  return kb;
 }
 
 function carButtons(cars: CarRecord[], prefix: string): InlineKeyboard {
@@ -261,14 +297,18 @@ function draftSlug(draft: CarDraft): string {
  * « archives » est une liste (les voitures déjà vendues) — les deux mots se
  * ressemblaient trop pour un client qui découvre le bot.
  */
-export function voitureHelp(siteName: string, admin: boolean): string {
+export function voitureHelp(siteName: string, admin: boolean, siteKey?: string): string {
   return (
     `🚗 <b>Gestion véhicules ${escapeHtml(siteName)}</b>\n\n` +
     `<b>Au quotidien</b>\n` +
     `/voiture add\n   Mettre une voiture en ligne : caractéristiques, photos, fiche rédigée pour toi, tu valides avant publication.\n` +
     `/voiture list\n   Voir toutes les voitures du site, en vente 🟢 ou vendues 🔴.\n` +
     `/voiture modif\n   Corriger une fiche : prix, kilométrage, couleur, motorisation, équipements, description, photos, catégories, accueil.\n` +
-    `/voiture prix\n   Raccourci pour changer seulement le prix.\n\n` +
+    `/voiture prix\n   Raccourci pour changer seulement le prix.\n` +
+    (siteKey && UNE_SITES.includes(siteKey)
+      ? `/voiture une\n   Choisir la voiture « à la une » : sa carte s'affiche tout en haut de l'accueil. Une seule à la fois.\n`
+      : '') +
+    `\n` +
     `<b>Quand une voiture est vendue</b>\n` +
     `/voiture vendu\n   Marquer une voiture comme vendue : elle quitte la liste des voitures à vendre, sa page reste en ligne avec le bandeau « Vendu » et sa fiche est réécrite au passé.\n` +
     `/voiture archives\n   Voir la liste des voitures déjà vendues (rien n'est modifié).\n` +
@@ -593,7 +633,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     const subcommand = args[0]?.toLowerCase();
 
     if (!subcommand || subcommand === 'help') {
-      await ctx.reply(voitureHelp(site.name, isAdmin(ctx.chat?.id?.toString() || '')), {
+      await ctx.reply(voitureHelp(site.name, isAdmin(ctx.chat?.id?.toString() || ''), site.key), {
         parse_mode: 'HTML',
       });
       return;
@@ -616,7 +656,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       }
       const lines = cars.map(
         (c) =>
-          `${c.disponible ? '🟢' : '🔴 VENDU'} <b>${escapeHtml(carLabel(c))}</b> — ${fr(c.prix)}€\n   <code>${c.slug}</code>`,
+          `${c.disponible ? '🟢' : '🔴 VENDU'} <b>${escapeHtml(carLabel(c))}</b> — ${fr(c.prix)}€${c.aLaUne && c.disponible ? ' — ⭐ à la une' : ''}\n   <code>${c.slug}</code>`,
       );
       await ctx.reply(
         `🚗 <b>${escapeHtml(site.name)} — véhicules (${cars.length})</b>\n\n${lines.join('\n\n')}`,
@@ -689,6 +729,25 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         return;
       }
       await ctx.reply(p.title, { parse_mode: 'HTML', reply_markup: carButtons(cars, p.prefix) });
+      return;
+    }
+
+    if (subcommand === 'une') {
+      if (!UNE_SITES.includes(site.key)) {
+        await ctx.reply(`La mise à la une n'existe pas sur ${site.name}.`);
+        return;
+      }
+      const cars = readCars(site.projectPath).filter((c) => c.disponible);
+      if (cars.length === 0) {
+        await ctx.reply('Aucun véhicule en vente.');
+        return;
+      }
+      const current = cars.find((c) => c.aLaUne);
+      await ctx.reply(
+        `⭐ <b>Quelle voiture mettre à la une ?</b>\nSa carte s'affiche tout en haut de l'accueil. Une seule à la fois : ton choix remplace la précédente.\n\n` +
+          `Actuellement : <b>${current ? escapeHtml(carLabel(current)) : 'aucune'}</b>`,
+        { parse_mode: 'HTML', reply_markup: uneKeyboard(cars) },
+      );
       return;
     }
 
@@ -905,6 +964,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       return;
     }
     const slug = car.slug;
+    const wasUne = !disponible && car.aLaUne === true;
     await ctx.reply(
       `⏳ ${disponible ? 'Remise en vente' : 'Vente'} de ${carLabel(car)} — réécriture de la fiche...`,
     );
@@ -913,6 +973,8 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
       replaceCar(content, slug, {
         disponible,
         dateVente: disponible ? undefined : todayIso(),
+        // Vendue, elle quitte la une : le site ne l'afficherait plus, autant ne pas laisser le champ traîner.
+        ...(wasUne ? { aLaUne: undefined } : {}),
         ...(description ? { description } : {}),
       }),
     );
@@ -922,6 +984,7 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
         (description
           ? '📄 Fiche réécrite.\n'
           : '⚠️ Fiche non réécrite (rédacteur indisponible), texte précédent conservé.\n') +
+        (wasUne ? `⭐ ${UNE_EMPTY_HINT}\n` : '') +
         describePublish(r),
       { parse_mode: 'HTML' },
     );
@@ -950,18 +1013,73 @@ export function registerVoitureCommand(bot: Bot<BotContext>) {
     await ctx.answerCallbackQuery();
     const site = await requireSite(ctx);
     if (!site) return;
-    const slug = findCarByRef(site, ctx.match![1])?.slug;
+    const car = findCarByRef(site, ctx.match![1]);
+    const slug = car?.slug;
     if (!slug || !updateCarsFile(site.projectPath, (content) => removeCar(content, slug))) {
       await ctx.reply(`❌ Véhicule "${ctx.match![1]}" non trouvé.`);
       return;
     }
     deleteCarImages(site, slug);
     const r = await publishSiteChange(site, `Remove vehicle: ${slug}`);
-    await ctx.reply(`🗑️ <b>${slug}</b> supprimé !\n${describePublish(r)}`, { parse_mode: 'HTML' });
+    await ctx.reply(
+      `🗑️ <b>${slug}</b> supprimé !\n${car?.aLaUne && car.disponible ? `⭐ ${UNE_EMPTY_HINT}\n` : ''}${describePublish(r)}`,
+      { parse_mode: 'HTML' },
+    );
     if (r.pushed && r.deploy !== 'none')
       verifyOnline(ctx, liveCheck.gone(carUrl(site, slug)), 'fiche retirée', () =>
         registerCarPage(site, slug, { removed: true }),
       );
+  });
+
+  /* ── À la une (carte du hero) ── */
+
+  bot.callbackQuery(/^voiture_une:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const site = await requireSite(ctx);
+    if (!site || !UNE_SITES.includes(site.key)) return;
+    const car = findCarByRef(site, ctx.match![1]);
+    if (!car) {
+      await ctx.reply(`❌ Véhicule "${ctx.match![1]}" non trouvé.`);
+      return;
+    }
+    // Un ancien clavier reste cliquable : pas de voiture vendue à la une, pas de republication pour rien.
+    if (!car.disponible) {
+      await ctx.reply(`ℹ️ ${carLabel(car)} est vendue : elle ne peut pas être à la une.`);
+      return;
+    }
+    if (car.aLaUne) {
+      await ctx.reply(`ℹ️ ${carLabel(car)} est déjà à la une — rien à faire.`);
+      return;
+    }
+    if (!updateCarsFile(site.projectPath, (content) => setUne(content, car.slug))) {
+      await ctx.reply(`❌ Véhicule "${car.slug}" non trouvé.`);
+      return;
+    }
+    const r = await publishSiteChange(site, `Une: ${car.slug}`);
+    await ctx.reply(`⭐ <b>${escapeHtml(carLabel(car))}</b> à la une de l'accueil.\n${describePublish(r)}`, {
+      parse_mode: 'HTML',
+    });
+    if (r.pushed && r.deploy !== 'none')
+      verifyOnline(
+        ctx,
+        liveCheck.hasText(homeUrl(site), uneMarker(car.slug)),
+        "voiture à la une sur l'accueil",
+      );
+  });
+
+  bot.callbackQuery('voiture_une_off', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const site = await requireSite(ctx);
+    if (!site || !UNE_SITES.includes(site.key)) return;
+    if (!readCars(site.projectPath).some((c) => c.aLaUne)) {
+      await ctx.reply("ℹ️ Aucune voiture n'est à la une — rien à faire.");
+      return;
+    }
+    updateCarsFile(site.projectPath, (content) => setUne(content, null));
+    const r = await publishSiteChange(site, 'Une: retirée');
+    await ctx.reply(`🚫 Plus aucune voiture à la une.\n${describePublish(r)}`);
+    if (r.pushed && r.deploy !== 'none')
+      verifyOnline(ctx, liveCheck.lacksText(homeUrl(site), 'data-une="'), "une retirée de l'accueil");
   });
 
   bot.callbackQuery('voiture_action_cancel', async (ctx) => {

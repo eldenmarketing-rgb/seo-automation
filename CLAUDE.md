@@ -286,6 +286,12 @@ La gestion SEO se fait via le dashboard.
   `vehicules`) avec **le titre, le H1 et la meta lus sur la page servie**, jamais le brouillon ; une fiche
   supprimée est notée dans `content.imported.removedAt` (l'historique interdit l'effacement, le crawl du lundi
   verra le 404, la redirection reste une décision admin). Inventaire Okaz importé le même jour (10 pages).
+  **À la une (2026-10-05, Okaz seulement)** : `/voiture une` pose le champ `aLaUne` sur **un seul** véhicule
+  (`setUne`, `src/vehicles/cars-file.ts`) — sa carte s'affiche dans le hero de l'accueil (`HeroCarCard`, site
+  Okaz `01e5e86`) ; « Retirer la une », une vente ou une suppression vident l'emplacement et le hero reprend
+  son rendu sans carte. Preuve en ligne relue sur l'accueil (`data-une="<slug>"`). Distinct de `enVedette`,
+  que tout le stock porte. `UNE_SITES` borne la commande : le champ casserait le build d'un site dont le type
+  `Car` ne le déclare pas (Ideo Car) — pour l'ouvrir ailleurs, livrer le type du site **avant** d'ajouter la clé.
 - **Rubrique Conseils depuis le dashboard (2026-09-03)** : une page `article` dont le slug commence par `conseils/`
   est publiée sur un site en mode fichiers par `src/deployers/inject-articles.ts` (branché dans `injectPages`,
   quel que soit le site, si `data/articles.ts` existe) : corps markdown assemblé (intro + `## section`), liens

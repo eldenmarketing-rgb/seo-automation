@@ -29,6 +29,11 @@ export interface CarRecord {
   description: string;
   images: string[];
   enVedette: boolean;
+  /**
+   * Carte du hero de l'accueil — un seul véhicule à la fois (`setUne`). Écrit seulement
+   * sur les sites dont le type `Car` le déclare (`UNE_SITES` dans `/voiture`).
+   */
+  aLaUne?: boolean;
   disponible: boolean;
   dateAjout?: string;
   dateVente?: string;

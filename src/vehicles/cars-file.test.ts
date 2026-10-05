@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendCar, parseCarsFile, removeCar, replaceCar, serializeCar } from './cars-file.js';
+import { appendCar, parseCarsFile, removeCar, replaceCar, serializeCar, setUne } from './cars-file.js';
 import type { CarRecord } from './types.js';
 
 /** Extrait fidèle des deux formats en production : fiche Ideo Car rédigée à la main, fiche Okaz écrite par le bot. */
@@ -131,6 +131,42 @@ describe('replaceCar', () => {
 
   it('rend null pour un slug inconnu', () => {
     expect(replaceCar(FIXTURE, 'inconnu', { prix: 1 })).toBeNull();
+  });
+});
+
+describe('setUne', () => {
+  const aLaUne = (content: string) =>
+    parseCarsFile(content)
+      .filter((c) => c.aLaUne)
+      .map((c) => c.slug);
+
+  it("n'écrit le champ que s'il est vrai", () => {
+    expect(serializeCar(NEW_CAR)).not.toContain('aLaUne');
+    expect(serializeCar({ ...NEW_CAR, aLaUne: true })).toContain('    aLaUne: true,');
+  });
+
+  it('pose le véhicule à la une et laisse le fichier évaluable', () => {
+    const next = setUne(FIXTURE, 'peugeot-2008-2022');
+    expect(next).not.toBeNull();
+    expect(aLaUne(next!)).toEqual(['peugeot-2008-2022']);
+    expect(parseCarsFile(next!)[0]).toEqual(parseCarsFile(FIXTURE)[0]);
+  });
+
+  it('ne laisse jamais deux véhicules à la une : le second choix retire le premier', () => {
+    const first = setUne(FIXTURE, 'peugeot-2008-2022')!;
+    const second = setUne(first, 'nissan-x-trail-2006')!;
+    expect(aLaUne(second)).toEqual(['nissan-x-trail-2006']);
+    expect(second.match(/aLaUne/g)).toHaveLength(1);
+  });
+
+  it("vide l'emplacement avec null", () => {
+    const next = setUne(setUne(FIXTURE, 'peugeot-2008-2022')!, null)!;
+    expect(aLaUne(next)).toEqual([]);
+    expect(next).not.toContain('aLaUne');
+  });
+
+  it('rend null pour un slug inconnu, sans retirer la une en place', () => {
+    expect(setUne(FIXTURE, 'inconnu')).toBeNull();
   });
 });
 

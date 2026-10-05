@@ -14,9 +14,12 @@ export function registerHelpCommand(bot: Bot<BotContext>) {
     if (!isAdmin(chatId)) {
       const siteKey = getSiteForChat(chatId);
       if (siteKey === 'voitures' || siteKey === 'okaz') {
-        await ctx.reply(`${voitureHelp(sites[siteKey]?.name ?? siteKey, false)}\n\n/help\n   Cette aide`, {
-          parse_mode: 'HTML',
-        });
+        await ctx.reply(
+          `${voitureHelp(sites[siteKey]?.name ?? siteKey, false, siteKey)}\n\n/help\n   Cette aide`,
+          {
+            parse_mode: 'HTML',
+          },
+        );
       } else if (siteKey === 'restaurant') {
         await ctx.reply(
           `<b>Gestion Mon Sauveur</b>\n\n` +

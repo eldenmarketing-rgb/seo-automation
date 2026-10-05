@@ -72,8 +72,9 @@ export function serializeCar(car: CarRecord): string {
     `      ${q(car.description)},`,
     `    images: ${list(car.images)},`,
     `    enVedette: ${car.enVedette},`,
-    `    disponible: ${car.disponible},`,
   );
+  if (car.aLaUne) lines.push(`    aLaUne: true,`);
+  lines.push(`    disponible: ${car.disponible},`);
   if (car.dateAjout) lines.push(`    dateAjout: ${q(car.dateAjout)},`);
   if (car.dateVente) lines.push(`    dateVente: ${q(car.dateVente)},`);
   return `  {\n${lines.join('\n')}\n  },`;
@@ -106,6 +107,21 @@ export function replaceCar(content: string, slug: string, patch: Partial<CarReco
     if (patch[key] === undefined) delete updated[key];
   }
   return content.slice(0, block.start) + serializeCar(updated) + content.slice(block.end);
+}
+
+/**
+ * Met `slug` « à la une » (carte du hero de l'accueil), ou vide l'emplacement si `slug` est null.
+ * Il n'y a qu'un emplacement : toute autre fiche qui portait le champ le perd dans le même geste.
+ * Rend null si le slug n'existe pas.
+ */
+export function setUne(content: string, slug: string | null): string | null {
+  const cars = parseCarsFile(content);
+  if (slug !== null && !cars.some((c) => c.slug === slug)) return null;
+  let next = content;
+  for (const c of cars) {
+    if (c.aLaUne && c.slug !== slug) next = replaceCar(next, c.slug, { aLaUne: undefined }) ?? next;
+  }
+  return slug === null ? next : replaceCar(next, slug, { aLaUne: true });
 }
 
 export function removeCar(content: string, slug: string): string | null {
