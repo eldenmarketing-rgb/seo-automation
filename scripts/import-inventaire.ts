@@ -276,14 +276,27 @@ interface SiteRow {
   site_key: string;
   domain: string | null;
   is_active: boolean;
+  mode: string | null;
+  delivery_mode: string | null;
 }
+
+/**
+ * Boutique CMS (template ecom-starter) : `/produit/*` et `/categorie/*` sont
+ * rendues par le code du site depuis le catalogue (tables products /
+ * product_categories). Les inscrire en `external` bloquerait la publication
+ * du rédactionnel CMS de même slug (`produit/<slug>`, `categorie/<slug>`).
+ * Le crawl et le backlog les suivent par URL, sans ligne seo_pages.
+ */
+const CATALOGUE_PREFIX = /^(produit|categorie)\//;
+const isCatalogueUrl = (site: SiteRow, slug: string) =>
+  site.mode === 'product' && site.delivery_mode === 'cms' && CATALOGUE_PREFIX.test(slug);
 
 async function main() {
   const db = getSupabase();
 
   const { data: sites, error: sitesErr } = await db
     .from('site_profiles')
-    .select('site_key, domain, is_active')
+    .select('site_key, domain, is_active, mode, delivery_mode')
     .order('site_key');
   if (sitesErr) throw new Error(`Registre des sites : ${sitesErr.message}`);
 
@@ -320,7 +333,12 @@ async function main() {
       continue;
     }
 
-    const missing = pages.filter((p) => !known.has(p.slug));
+    const catalogue = pages.filter((p) => isCatalogueUrl(site, p.slug)).length;
+    if (catalogue > 0)
+      console.log(
+        `${site.site_key.padEnd(14)} ·  ${catalogue} URL de catalogue (produit/, categorie/) laissées au site`,
+      );
+    const missing = pages.filter((p) => !known.has(p.slug) && !isCatalogueUrl(site, p.slug));
     const imported: string[] = [];
     const skipped: string[] = [];
 
