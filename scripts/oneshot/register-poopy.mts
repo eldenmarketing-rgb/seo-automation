@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { getSupabase } from "../../src/db/client";
 
 const SITE = "poopy";
-const LOCAL = "http://localhost:3022";
+const LOCAL = "https://poopy.adseor.com";
 const envLocal = readFileSync("/home/ubuntu/sites/Poopy/.env.local", "utf8");
 const secret = envLocal.match(/^REVALIDATE_SECRET=(.+)$/m)?.[1]?.trim();
 if (!secret) throw new Error("REVALIDATE_SECRET introuvable dans Poopy/.env.local");
@@ -26,12 +26,12 @@ const row = {
   scope: "national",
   mode: "product",
   niche:
-    "Boutique en ligne Poopy : fondants parfumés et fondants crémeux pour brûle-parfum, bougies parfumées, bijoux fantaisie dorés",
+    "Boutique en ligne Poopy : fondants parfumés et fondants crémeux pour brûle-parfum, et bougies bijoux (un bijou en acier inoxydable doré caché dans la cire, révélé à la combustion), le tout coulé à la main en cire végétale avec des parfums de Grasse",
   geo_target: "France métropolitaine (livraison)",
-  business: "Boutique en ligne de fondants parfumés, bougies et bijoux",
+  business: "Boutique en ligne de fondants parfumés et de bougies bijoux",
   business_model: "ecommerce",
   target_audience:
-    "Femmes 25-55 ans qui parfument leur intérieur (fondants, bougies) et cherchent un petit cadeau ou un bijou du quotidien, sur mobile",
+    "Femmes 25-55 ans qui parfument leur intérieur (fondants) et cherchent un cadeau qui fait un effet (bougie bijou), sur mobile",
   domain: LOCAL,
   gsc_domain: null,
   phone: "0000000000",
@@ -50,29 +50,29 @@ const row = {
     "fondant crémeux",
     "cire fouettée parfumée",
     "brûle-parfum",
-    "bougie parfumée",
-    "bougie végétale",
-    "bijou fantaisie doré",
-    "collier acier inoxydable",
+    "bougie bijou",
+    "bougie avec bijou caché",
+    "bougie surprise bijou",
+    "cadeau bougie bijou",
     "idée cadeau parfum d'intérieur",
   ],
   reject_topics: ["recette", "fondant au chocolat", "pâtisserie", "grossiste", "fabriquer soi-même", "emploi", "formation"],
   triage_instructions:
-    "GARDER : requêtes d'achat de fondants parfumés / cire parfumée pour brûle-parfum, fondants crémeux, bougies parfumées, bijoux fantaisie dorés, cadeaux parfum d'intérieur, questions d'usage (comment utiliser, combien de temps). REJETER : fondant au chocolat et pâtisserie (homonyme), DIY/fabrication, grossiste, emploi, formation.",
+    "GARDER : requêtes d'achat de fondants parfumés / cire parfumée pour brûle-parfum, fondants crémeux, bougies bijoux (bougie avec bijou caché, bougie surprise), cadeaux, questions d'usage (comment utiliser, combien de temps, comment récupérer le bijou). REJETER : fondant au chocolat et pâtisserie (homonyme), bijoux seuls sans bougie, DIY/fabrication, grossiste, emploi, formation.",
   services: [],
-  seo_keyword_patterns: ["fondant parfumé {parfum}", "bougie parfumée {parfum}", "{bijou} doré acier inoxydable"],
+  seo_keyword_patterns: ["fondant parfumé {parfum}", "bougie bijou {parfum}", "bougie bijou {bijou}"],
   brand: {
     personality:
       "Une petite boutique qui parle comme à une amie : chaleureuse, précise sur l'usage, jamais mièvre",
     tone: "« nous » et « vous », phrases courtes, le parfum et l'usage avant les adjectifs, jamais de superlatif, jamais de prix dans le texte",
     ctaStyle:
       "le bouton d'achat est rendu par la fiche ; le texte informe (parfum, usage, durée), un seul rappel du téléphone en fin de page",
-    wordsToUse: ["brûle-parfum", "cube", "diffusion", "note de tête / de cœur / de fond", "cire fouettée", "petites séries"],
-    wordsToAvoid: ["pas cher", "meilleur prix", "promo", "stock limité", "dernière chance", "fait main" , "naturel", "certifié", "avis"],
-    experienceProof: "À CONFIRMER avec Elden : où et comment les fondants et bougies sont coulés (docs/A-FOURNIR.md du site)",
+    wordsToUse: ["brûle-parfum", "cube", "diffusion", "note de tête / de cœur / de fond", "cire fouettée", "cire végétale", "coulé à la main", "parfum de Grasse", "bijou caché dans la cire", "capsule", "acier inoxydable doré", "petites séries"],
+    wordsToAvoid: ["pas cher", "meilleur prix", "promo", "stock limité", "dernière chance", "naturel", "bio", "certifié", "avis", "plaqué or", "or"],
+    experienceProof: "Fondants, fondants crémeux et bougies bijoux coulés à la main par petites séries, en cire végétale, parfums de Grasse (confirmé par Elden le 2026-10-15) ; le bijou caché dans la bougie est en acier inoxydable doré",
   },
   content_rules: {
-    doNotMention: ["prix", "remise", "délai de livraison", "stock", "note", "nombre d'avis", "fait main", "cire végétale (tant que non confirmé)"],
+    doNotMention: ["prix", "remise", "délai de livraison", "stock", "note", "nombre d'avis", "paraffine", "or massif ou plaqué or"],
   },
 };
 

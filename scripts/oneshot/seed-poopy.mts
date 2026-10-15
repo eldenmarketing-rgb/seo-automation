@@ -1,7 +1,8 @@
 /**
- * Catalogue de LANCEMENT de la boutique Poopy (site_key `poopy`) : 4 collections
- * (fondants parfumés, fondants crémeux, bougies, bijoux) et 13 produits avec
- * variantes (parfum, format, longueur). Noms, parfums, prix et stocks sont des
+ * Catalogue de LANCEMENT de la boutique Poopy (site_key `poopy`) : 3 collections
+ * (fondants parfumés, fondants crémeux, bougies bijoux = bougie avec un bijou caché
+ * dans la cire, révélé à la combustion — format My Jolie Candle) et 13 produits
+ * avec variantes (bijou, parfum, couleur). Noms, parfums, prix et stocks sont des
  * EXEMPLES à remplacer par l'offre réelle depuis /admin du site ; les photos
  * sont des placeholders Unsplash (hôte autorisé dans next.config.ts du site,
  * à retirer quand les vraies photos sont dans le bucket).
@@ -55,16 +56,11 @@ const categories = [
     image: PHOTOS.cremeVerre,
   },
   {
-    slug: "bougies",
-    name: "Bougies parfumées",
-    description: "Bougies en verre, mèche coton, parfums choisis pour tenir du premier au dernier allumage.",
+    slug: "bougies-bijoux",
+    name: "Bougies bijoux",
+    description:
+      "Une bougie parfumée avec un bijou caché dans la cire : bracelet, collier ou boucles d'oreilles. Après quelques heures de combustion, la capsule apparaît, on la retire, on découvre le bijou.",
     image: PHOTOS.bougieVerre,
-  },
-  {
-    slug: "bijoux",
-    name: "Bijoux",
-    description: "Colliers, bracelets et boucles d'oreilles dorés, à porter tous les jours.",
-    image: PHOTOS.chainesOr,
   },
 ];
 
@@ -104,7 +100,7 @@ const products: Product[] = [
     unit: "plaquette de 6 cubes · 50 g",
     attributes: {
       Famille: "Gourmand",
-      "Notes": "Vanille, caramel, pointe de sel",
+      Notes: "Vanille, caramel, pointe de sel",
       Contenance: "6 cubes · 50 g",
       Diffusion: "6 à 8 h par cube",
       Usage: "Brûle-parfum à bougie chauffe-plat",
@@ -240,126 +236,134 @@ const products: Product[] = [
     variants: simple("FC-ORA", 7.9, 0),
   },
   {
-    slug: "bougie-parfumee-vanille-caramel",
-    category: "bougies",
-    name: "Bougie parfumée Vanille caramel",
+    slug: "bougie-bijou-vanille-caramel",
+    category: "bougies-bijoux",
+    name: "Bougie bijou Vanille caramel",
     description:
-      "La vanille caramel de nos fondants, en bougie : verre épais, mèche coton, parfum présent dès le premier allumage sans être entêtant.\n\nÀ la première utilisation, laissez-la brûler jusqu'à ce que toute la surface soit fondue : la bougie ne se creusera pas. Coupez la mèche à 5 mm avant chaque allumage.",
+      "La vanille caramel de nos fondants, en bougie, avec un bijou caché dans la cire. Vous choisissez le type de bijou : bracelet, collier ou boucles d'oreilles, en acier inoxydable doré.\n\nLe bijou est protégé dans une capsule, posée dans la cire. Après deux à trois heures de combustion, la capsule affleure : éteignez la bougie, retirez-la avec une pince, laissez-la refroidir et ouvrez-la.\n\nÀ la première utilisation, laissez la bougie brûler jusqu'à ce que toute la surface soit fondue, et coupez la mèche à 5 mm avant chaque allumage.",
     unit: "",
     attributes: {
       Famille: "Gourmand",
       Notes: "Vanille, caramel, pointe de sel",
+      Bijou: "Acier inoxydable doré, au choix",
+      Révélation: "Après 2 à 3 h de combustion",
+      Combustion: "Environ 40 h",
       Mèche: "Coton",
-      Contenant: "Verre, réutilisable",
     },
-    images: [PHOTOS.bougieVerre, PHOTOS.bougieAllumette],
+    images: [PHOTOS.bougieVerre, PHOTOS.braceletMagazine, PHOTOS.bougieAllumette],
     status: "published",
     featured: true,
     variants: [
-      { name: "180 g", options: { Format: "180 g · 35 h" }, price: 19.9, stock: 10, sku: "BG-VAN-180" },
-      { name: "300 g", options: { Format: "300 g · 55 h" }, price: 27.9, stock: 5, sku: "BG-VAN-300" },
+      { name: "Bracelet", options: { Bijou: "Bracelet" }, price: 34.9, stock: 8, sku: "BB-VAN-BRA", image: PHOTOS.braceletMagazine },
+      { name: "Collier", options: { Bijou: "Collier" }, price: 34.9, stock: 6, sku: "BB-VAN-COL", image: PHOTOS.collierOr },
+      { name: "Boucles d'oreilles", options: { Bijou: "Boucles d'oreilles" }, price: 34.9, stock: 5, sku: "BB-VAN-BO", image: PHOTOS.parure },
     ],
   },
   {
-    slug: "bougie-parfumee-fleur-de-coton",
-    category: "bougies",
-    name: "Bougie parfumée Fleur de coton",
+    slug: "bougie-bijou-fleur-de-coton",
+    category: "bougies-bijoux",
+    name: "Bougie bijou Fleur de coton",
     description:
-      "Fleur de coton, musc blanc, iris : le linge propre, en bougie. Verre épais, mèche coton, parfum frais qui convient à une chambre.\n\nMêmes conseils d'allumage que toutes nos bougies : première combustion jusqu'à la surface entière, mèche coupée à 5 mm.",
+      "Fleur de coton, musc blanc, iris : le linge propre, en bougie, avec un bijou caché dans la cire. Bracelet, collier ou boucles d'oreilles en acier inoxydable doré, au choix.\n\nLa capsule qui protège le bijou apparaît après deux à trois heures de combustion : on éteint, on la retire à la pince, on la laisse refroidir, on l'ouvre.",
     unit: "",
     attributes: {
       Famille: "Frais, poudré",
       Notes: "Fleur de coton, musc blanc, iris",
+      Bijou: "Acier inoxydable doré, au choix",
+      Révélation: "Après 2 à 3 h de combustion",
+      Combustion: "Environ 40 h",
       Mèche: "Coton",
-      Contenant: "Verre, réutilisable",
     },
-    images: [PHOTOS.potCeramique, PHOTOS.bougiesGroupe],
+    images: [PHOTOS.potCeramique, PHOTOS.collierOr, PHOTOS.bougiesGroupe],
     status: "published",
-    featured: false,
+    featured: true,
     variants: [
-      { name: "180 g", options: { Format: "180 g · 35 h" }, price: 19.9, stock: 7, sku: "BG-COT-180" },
-      { name: "300 g", options: { Format: "300 g · 55 h" }, price: 27.9, stock: 3, sku: "BG-COT-300" },
+      { name: "Bracelet", options: { Bijou: "Bracelet" }, price: 34.9, stock: 7, sku: "BB-COT-BRA", image: PHOTOS.braceletMagazine },
+      { name: "Collier", options: { Bijou: "Collier" }, price: 34.9, stock: 4, sku: "BB-COT-COL", image: PHOTOS.collierOr },
+      { name: "Boucles d'oreilles", options: { Bijou: "Boucles d'oreilles" }, price: 34.9, stock: 3, sku: "BB-COT-BO", image: PHOTOS.parure },
     ],
   },
   {
-    slug: "bougie-parfumee-bois-de-santal",
-    category: "bougies",
-    name: "Bougie parfumée Bois de santal",
+    slug: "bougie-bijou-monoi",
+    category: "bougies-bijoux",
+    name: "Bougie bijou Monoï",
     description:
-      "Santal, cèdre et une pointe d'ambre : une bougie chaude et boisée pour le salon, l'automne et le soir. Verre ambré, mèche coton.",
+      "Tiaré, coco et vanille : la bougie des soirs d'été, avec un bijou caché dans la cire. Bracelet, collier ou boucles d'oreilles en acier inoxydable doré, au choix.\n\nLa capsule apparaît après deux à trois heures de combustion.",
+    unit: "",
+    attributes: {
+      Famille: "Solaire",
+      Notes: "Tiaré, coco, vanille",
+      Bijou: "Acier inoxydable doré, au choix",
+      Révélation: "Après 2 à 3 h de combustion",
+      Combustion: "Environ 40 h",
+      Mèche: "Coton",
+    },
+    images: [PHOTOS.bougiesGroupe, PHOTOS.parure],
+    status: "published",
+    featured: false,
+    variants: [
+      { name: "Bracelet", options: { Bijou: "Bracelet" }, price: 34.9, stock: 5, sku: "BB-MON-BRA", image: PHOTOS.braceletMagazine },
+      { name: "Collier", options: { Bijou: "Collier" }, price: 34.9, stock: 2, sku: "BB-MON-COL", image: PHOTOS.collierOr },
+      { name: "Boucles d'oreilles", options: { Bijou: "Boucles d'oreilles" }, price: 34.9, stock: 0, sku: "BB-MON-BO", image: PHOTOS.parure },
+    ],
+  },
+  {
+    slug: "bougie-bijou-bois-de-santal",
+    category: "bougies-bijoux",
+    name: "Bougie bijou Bois de santal",
+    description:
+      "Santal, cèdre et une pointe d'ambre : une bougie chaude et boisée, avec un bijou caché dans la cire. Verre ambré. Bracelet, collier ou boucles d'oreilles en acier inoxydable doré, au choix.\n\nLa capsule apparaît après deux à trois heures de combustion.",
     unit: "",
     attributes: {
       Famille: "Boisé, ambré",
       Notes: "Santal, cèdre, ambre",
+      Bijou: "Acier inoxydable doré, au choix",
+      Révélation: "Après 2 à 3 h de combustion",
+      Combustion: "Environ 40 h",
       Mèche: "Coton",
-      Contenant: "Verre ambré, réutilisable",
     },
-    images: [PHOTOS.potsAmbre, PHOTOS.bougiesEucalyptus],
+    images: [PHOTOS.potsAmbre, PHOTOS.bougiesEucalyptus, PHOTOS.braceletsRoche],
     status: "published",
     featured: false,
     variants: [
-      { name: "180 g", options: { Format: "180 g · 35 h" }, price: 21.9, stock: 6, sku: "BG-SAN-180" },
-      { name: "300 g", options: { Format: "300 g · 55 h" }, price: 29.9, stock: 2, sku: "BG-SAN-300" },
+      { name: "Bracelet", options: { Bijou: "Bracelet" }, price: 36.9, stock: 4, sku: "BB-SAN-BRA", image: PHOTOS.braceletsRoche },
+      { name: "Collier", options: { Bijou: "Collier" }, price: 36.9, stock: 3, sku: "BB-SAN-COL", image: PHOTOS.collierOr },
+      { name: "Boucles d'oreilles", options: { Bijou: "Boucles d'oreilles" }, price: 36.9, stock: 2, sku: "BB-SAN-BO", image: PHOTOS.parureNoir },
     ],
   },
   {
-    slug: "collier-chaine-doree",
-    category: "bijoux",
-    name: "Collier chaîne dorée",
+    slug: "bougie-bijou-surprise",
+    category: "bougies-bijoux",
+    name: "Bougie bijou Surprise",
     description:
-      "Une chaîne fine à maille forçat, dorée, avec fermoir mousqueton et anneau de réglage. Le collier qu'on garde sous la douche et qu'on ne quitte plus.\n\nAcier inoxydable doré : ne noircit pas, ne verdit pas, convient aux peaux sensibles.",
+      "Vous choisissez le parfum, on choisit le bijou : bracelet, collier ou boucles d'oreilles, en acier inoxydable doré, caché dans la cire. La bougie à offrir quand on ne sait pas ce qu'elle porte déjà.\n\nLa capsule apparaît après deux à trois heures de combustion : on éteint, on la retire à la pince, on la laisse refroidir, on l'ouvre.",
     unit: "",
     attributes: {
-      Matière: "Acier inoxydable doré",
-      Maille: "Forçat fine",
-      Fermoir: "Mousqueton, anneau de réglage 3 cm",
+      Bijou: "Surprise — acier inoxydable doré",
+      Révélation: "Après 2 à 3 h de combustion",
+      Combustion: "Environ 40 h",
+      Mèche: "Coton",
     },
-    images: [PHOTOS.collierOr, PHOTOS.chainesOr],
+    images: [PHOTOS.bougieAllumette, PHOTOS.chainesOr],
     status: "published",
     featured: true,
     variants: [
-      { name: "42 cm", options: { Longueur: "42 cm" }, price: 24.9, stock: 8, sku: "BJ-COL-42" },
-      { name: "45 cm", options: { Longueur: "45 cm" }, price: 24.9, stock: 8, sku: "BJ-COL-45" },
-    ],
-  },
-  {
-    slug: "bracelet-chaine-doree",
-    category: "bijoux",
-    name: "Bracelet chaîne dorée",
-    description:
-      "La même maille forçat que le collier, au poignet. Fermoir mousqueton, chaînette de réglage de 2 cm. Se porte seul ou empilé.\n\nAcier inoxydable doré, résistant à l'eau et au quotidien.",
-    unit: "",
-    attributes: {
-      Matière: "Acier inoxydable doré",
-      Longueur: "16 cm + 2 cm de réglage",
-      Fermoir: "Mousqueton",
-    },
-    images: [PHOTOS.braceletMagazine, PHOTOS.braceletsRoche],
-    status: "published",
-    featured: false,
-    variants: simple("BJ-BRA", 19.9, 11),
-  },
-  {
-    slug: "boucles-d-oreilles-creoles-dorees",
-    category: "bijoux",
-    name: "Boucles d'oreilles créoles dorées",
-    description:
-      "Des créoles fines et légères, fermeture à clip, en acier inoxydable doré. Assez discrètes pour tous les jours, assez présentes pour le soir.\n\nVendues par paire, livrées dans une pochette.",
-    unit: "la paire",
-    attributes: {
-      Matière: "Acier inoxydable doré",
-      Fermeture: "Clip",
-      Emballage: "Pochette",
-    },
-    images: [PHOTOS.parure, PHOTOS.parureNoir],
-    status: "published",
-    featured: true,
-    variants: [
-      { name: "20 mm", options: { Diamètre: "20 mm" }, price: 17.9, stock: 9, sku: "BJ-CRE-20" },
-      { name: "30 mm", options: { Diamètre: "30 mm" }, price: 19.9, stock: 4, sku: "BJ-CRE-30" },
+      { name: "Vanille caramel", options: { Parfum: "Vanille caramel" }, price: 32.9, stock: 6, sku: "BB-SUR-VAN" },
+      { name: "Fleur de coton", options: { Parfum: "Fleur de coton" }, price: 32.9, stock: 6, sku: "BB-SUR-COT" },
+      { name: "Monoï", options: { Parfum: "Monoï" }, price: 32.9, stock: 4, sku: "BB-SUR-MON" },
+      { name: "Bois de santal", options: { Parfum: "Bois de santal" }, price: 32.9, stock: 3, sku: "BB-SUR-SAN" },
     ],
   },
 ];
+
+// Faits confirmés par Elden le 2026-10-15 : tout ce qui est coulé (fondants, crémeux, bougies) l'est à la
+// main, en cire végétale, avec des parfums de Grasse ; les bijoux sont en acier inoxydable doré.
+const COULE = new Set(["fondants-parfumes", "fondants-cremeux", "bougies-bijoux"]);
+for (const p of products) {
+  if (COULE.has(p.category) && p.slug !== "brule-parfum-ceramique") {
+    p.attributes = { ...p.attributes, Cire: "Végétale, coulée à la main", Parfum: "Parfum de Grasse" };
+  }
+}
 
 async function main() {
   const db = getSupabase();
