@@ -188,3 +188,37 @@ ALTER TABLE gbp_posts ADD COLUMN IF NOT EXISTS error TEXT;
 -- ─── Lot 3 : textes de la fiche préparés par l'outil (à coller) ───────────────
 ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS description_draft TEXT;
 ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS qa_draft JSONB;
+
+-- ─── Lot 5 : score, leaders du pack, points de vue, risques ───────────────────
+-- Le rang Maps dépend d'où l'on cherche : 3 points de vue par ville (centre + 2 bords de zone).
+ALTER TABLE gbp_rank ADD COLUMN IF NOT EXISTS vantage TEXT NOT NULL DEFAULT 'centre';
+-- Les fiches qui dominent le pack du site, relues chaque semaine pour la comparaison critère par critère.
+CREATE TABLE IF NOT EXISTS gbp_leader_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL,
+  site_key TEXT NOT NULL,
+  cid TEXT NOT NULL,
+  place_id TEXT,
+  name TEXT,
+  primary_category TEXT,
+  categories TEXT[] NOT NULL DEFAULT '{}',
+  rating NUMERIC,
+  votes INTEGER,
+  photos INTEGER,
+  description_len INTEGER,
+  attributes_count INTEGER,
+  has_website BOOLEAN,
+  has_services BOOLEAN,
+  qa_count INTEGER,
+  pack_hits INTEGER NOT NULL DEFAULT 0,
+  raw JSONB,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gbp_leaders_site ON gbp_leader_snapshots(site_key, fetched_at DESC);
+CREATE OR REPLACE VIEW v_gbp_leaders_latest AS
+  SELECT l.* FROM gbp_leader_snapshots l
+  JOIN (SELECT site_key, max(fetched_at) AS last FROM gbp_leader_snapshots GROUP BY site_key) m
+    ON m.site_key = l.site_key AND l.fetched_at >= m.last - interval '10 minutes';
+ALTER TABLE gbp_leader_snapshots ENABLE ROW LEVEL SECURITY;
+-- Doublons possibles de la fiche (même téléphone ou même domaine, autre CID) vus dans Maps.
+ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS duplicates JSONB;

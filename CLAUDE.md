@@ -247,6 +247,15 @@ visuels, Q&R) ; 4) publication par l'API Google Business Profile (accès sur for
   `avis` (votes < ¼ de la médiane des 3 premiers) → `horaires` (fiche ≠ `hours_expected` saisi) → `ok`.
 - **Action** : une `GBP_OPTIMIZATION` par site, `source = scan:gbp`, `details.lines` = preuves ; elle remplace celle
   du module Concurrents pour le même site. Contrainte `opportunities_sources_check` étendue à `gbp` dans la migration.
+- **Score et comparaison (lot 5, 2026-10-18)** : le job mesure le pack depuis **3 points de vue** par ville (`src/gbp/geo.ts` :
+  centre + 2 bords de zone, colonne `gbp_rank.vantage`), relit chaque semaine les **3 leaders** du pack (`gbp_leader_snapshots`,
+  vue `v_gbp_leaders_latest` : catégorie, avis, photos, description, attributs, services, Q&R), cherche les **homonymes**
+  dans Maps (`gbp_listings.duplicates`) et alerte Telegram sur entrée/sortie du top 3 au centre, avis ≤ 2★ sans réponse
+  depuis 48 h, doublon. Dashboard `src/lib/gbp-score.ts` : **score 0-100** critère par critère (catégorie alignée 15,
+  avis vs leaders 12, avis 30 j 8, description 8, photos 8, réponses 6, services 6, contact 6, attributs 5, catégories
+  secondaires 5, posts 5, nom sans bourrage 5, pas de doublon 5, note 4, Q&R 4, revendiquée 3) avec la liste des gestes
+  triée par points, comparaison fiche ↔ médiane des leaders, contrôle nom/tél/site fiche ↔ `site_profiles`, risques ;
+  tout dans `/gbp`, le résumé (`score`, `risks`) et l'action backlog (`details.score/todo`).
 - **Contenu préparé (lot 3, 2026-10-18)** : dashboard `src/lib/gbp-content.ts` (Claude CLI, faits = `buildFactsBlock` +
   catalogue `products` avec prix réels + pages publiées ; interdits : prix/délai/promesse inventés, URL/tél dans la
   description) — `POST /api/gbp/reviews/[id]/draft` (réponse 180-400 car., vouvoiement, signée), `POST /api/gbp/posts/propose`

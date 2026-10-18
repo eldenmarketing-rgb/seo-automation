@@ -29,7 +29,7 @@ import * as logger from '../utils/logger.js';
 import { sendTelegram } from '../notifications/telegram.js';
 import { QUERY_LIMITS, loadQueryInputs, selectQueries } from '../competitors/queries.js';
 import { LOCATION_LOCAL } from '../competitors/serp.js';
-import { locationCoordinate } from '../gbp/geo.js';
+import { vantagesFor } from '../gbp/geo.js';
 import { fetchListingInfo } from '../gbp/info.js';
 import { fetchMaps } from '../gbp/maps.js';
 import { fetchReviews, getReviewsTask } from '../gbp/reviews.js';
@@ -43,6 +43,10 @@ const maxQueries = Number(args.find((a) => a.startsWith('--max-queries='))?.spli
 
 /** Fiches gardées par requête : la nôtre + celles devant elle, plafonné. */
 const RANK_KEEP = 5;
+/** Leaders du pack relus chaque semaine (les plus souvent dans le top 3 au centre). */
+const LEADERS = 3;
+/** Un avis ≤ 2★ sans réponse depuis ce délai remonte sur Telegram. */
+const NEGATIVE_ALERT_HOURS = 48;
 
 interface SiteRow {
   site_key: string;
@@ -58,6 +62,8 @@ interface SiteReport {
   queries: number;
   ranked: number;
   reviews_new: number;
+  leaders: number;
+  duplicates: number;
   cost: number;
   skipped?: string;
 }
@@ -78,6 +84,22 @@ function describeHours(hours: unknown): string {
     `${h.hour}h${h.minute ? String(h.minute).padStart(2, '0') : ''}`;
   return `${f(day.open)}-${f(day.close)}`;
 }
+
+function countAttributes(a: unknown): number {
+  if (!a || typeof a !== 'object') return 0;
+  let n = 0;
+  for (const v of Object.values(a as Record<string, unknown>))
+    n += Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.keys(v as object).length : 1;
+  return n;
+}
+
+const strip = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 
 /** Un site actif sans fiche : on cherche par nom + ville, une fois par semaine (cache). */
 async function discover(
@@ -147,48 +169,114 @@ async function scanListing(
     console.log('  Fiche introuvable par CID (supprimée ? fusionnée ?)');
   }
 
-  // ─── 2. Le pack local sur les requêtes du site ───────────────────────────
+  // ─── 2. Le pack local sur les requêtes du site, depuis 3 points de vue ──
   const inputs = await loadQueryInputs(db, {
     site_key: site.site_key,
     services: site.services,
     city: site.city,
   });
   const queries = selectQueries(inputs, { ...QUERY_LIMITS, total: maxQueries });
-  const geo = locationCoordinate(site.city);
+  const geo = vantagesFor(site.city);
   if (!geo.known)
     logger.warn(
       `${site.site_key} : ville « ${site.city ?? '?'} » inconnue de gbp/geo.ts, Maps vu depuis Perpignan`,
     );
   const rankRows: Array<Record<string, unknown>> = [];
   let ranked = 0;
+  const leaderHits = new Map<string, { item: MapsItem; hits: number }>();
+  const ourBestCentre = new Map<string, number | null>();
   for (const q of queries) {
-    const { items, cost: c } = await fetchMaps(q.query, geo.coord);
-    cost += c;
-    const ours = items.find((i) => i.cid === listing.cid);
-    const keep: MapsItem[] = items.filter((i) => i.rank <= RANK_KEEP || i.cid === listing.cid);
-    if (ours) ranked++;
-    console.log(
-      `  ${String(ours ? `#${ours.rank}` : '—').padStart(4)}  ${q.query.padEnd(44)} ${items[0] ? `1er : ${items[0].name.slice(0, 32)} (${items[0].votes ?? 0} avis)` : 'aucun résultat'}`,
-    );
-    for (const i of keep) {
-      rankRows.push({
-        run_id: runId,
-        site_key: site.site_key,
-        query: q.query,
-        query_source: q.source,
-        impressions: q.impressions,
-        rank: i.rank,
-        cid: i.cid,
-        place_id: i.place_id,
-        name: i.name,
-        category: i.category,
-        rating: i.rating,
-        votes: i.votes,
-        is_ours: i.cid === listing.cid,
-        fetched_at: now,
-      });
+    const perVantage: string[] = [];
+    for (const v of geo.vantages) {
+      const { items, cost: c } = await fetchMaps(q.query, v.coord);
+      cost += c;
+      const ours = items.find((i) => i.cid === listing.cid);
+      if (v.key === 'centre') {
+        ourBestCentre.set(q.query, ours?.rank ?? null);
+        if (ours) ranked++;
+        for (const i of items.filter((i) => i.rank <= 3 && i.cid && i.cid !== listing.cid)) {
+          const h = leaderHits.get(i.cid as string) ?? { item: i, hits: 0 };
+          h.hits++;
+          leaderHits.set(i.cid as string, h);
+        }
+      }
+      perVantage.push(`${v.key} ${ours ? `#${ours.rank}` : '—'}`);
+      const keep: MapsItem[] = items.filter((i) => i.rank <= RANK_KEEP || i.cid === listing.cid);
+      for (const i of keep) {
+        rankRows.push({
+          run_id: runId,
+          site_key: site.site_key,
+          query: q.query,
+          query_source: q.source,
+          impressions: q.impressions,
+          rank: i.rank,
+          cid: i.cid,
+          place_id: i.place_id,
+          name: i.name,
+          category: i.category,
+          rating: i.rating,
+          votes: i.votes,
+          is_ours: i.cid === listing.cid,
+          vantage: v.key,
+          fetched_at: now,
+        });
+      }
     }
+    const first = rankRows.find((r) => r.query === q.query && r.vantage === 'centre' && r.rank === 1);
+    console.log(
+      `  ${q.query.padEnd(40)} ${perVantage.join(' · ').padEnd(34)} 1er : ${first ? `${String(first.name).slice(0, 30)} (${first.votes ?? 0} avis)` : 'aucun'}`,
+    );
   }
+
+  // ─── 2bis. Les leaders du pack, relus fiche par fiche ─────────────────────
+  const leaders = [...leaderHits.values()].sort((a, b) => b.hits - a.hits).slice(0, LEADERS);
+  const leaderRows: Array<Record<string, unknown>> = [];
+  for (const l of leaders) {
+    const info = await fetchListingInfo({ cid: l.item.cid as string }, LOCATION_LOCAL);
+    cost += info.cost;
+    const f = info.facts;
+    const raw = (f?.raw ?? {}) as Record<string, unknown>;
+    leaderRows.push({
+      run_id: runId,
+      site_key: site.site_key,
+      cid: l.item.cid,
+      place_id: f?.place_id ?? l.item.place_id,
+      name: f?.name ?? l.item.name,
+      primary_category: f?.primary_category ?? l.item.category,
+      categories: f?.categories ?? [],
+      rating: f?.rating ?? l.item.rating,
+      votes: f?.votes ?? l.item.votes,
+      photos: f?.photos ?? null,
+      description_len: typeof raw.description === 'string' ? raw.description.length : 0,
+      attributes_count: countAttributes(raw.attributes),
+      has_website: !!f?.website,
+      has_services: !!raw.services,
+      qa_count: typeof raw.questions_and_answers_count === 'number' ? raw.questions_and_answers_count : null,
+      pack_hits: l.hits,
+      raw,
+      fetched_at: now,
+    });
+    console.log(
+      `  Leader ×${l.hits} : ${(f?.name ?? l.item.name).slice(0, 40)} — ${f?.primary_category ?? '?'} · ${f?.votes ?? l.item.votes ?? 0} avis · ${f?.photos ?? '?'} photos · description ${typeof raw.description === 'string' ? raw.description.length : 0} car.`,
+    );
+  }
+
+  // ─── 2ter. Doublons : homonymes stricts sous un autre CID ──────────────────
+  const duplicates: Array<{ cid: string; name: string; reason: string }> = [];
+  try {
+    const { items } = await fetchMaps(site.name ?? site.site_key, geo.vantages[0].coord, 10);
+    const ourName = strip(facts?.name ?? listing.name ?? '');
+    for (const i of items) {
+      if (!i.cid || i.cid === listing.cid || !ourName) continue;
+      if (strip(i.name) === ourName) duplicates.push({ cid: i.cid, name: i.name, reason: 'même nom' });
+    }
+  } catch (e) {
+    logger.warn(`Doublons ${site.site_key} : ${(e as Error).message}`);
+  }
+  if (duplicates.length)
+    console.log(
+      `  ⚠ ${duplicates.length} fiche(s) homonyme(s) dans Maps : ${duplicates.map((d) => d.cid).join(', ')}`,
+    );
 
   // ─── 3. Les avis ─────────────────────────────────────────────────────────
   let reviews: ReviewFacts[] = [];
@@ -223,7 +311,15 @@ async function scanListing(
   );
 
   if (!apply)
-    return { listing: listing.cid, queries: queries.length, ranked, reviews_new: fresh.length, cost };
+    return {
+      listing: listing.cid,
+      queries: queries.length,
+      ranked,
+      reviews_new: fresh.length,
+      leaders: leaderRows.length,
+      duplicates: duplicates.length,
+      cost,
+    };
 
   // ─── Écriture ────────────────────────────────────────────────────────────
   if (facts) {
@@ -246,9 +342,32 @@ async function scanListing(
     });
     if (error) throw new Error(`gbp_snapshots : ${error.message}`);
   }
+  // Rang précédent au centre, pour l'alerte entrée/sortie du top 3.
+  const { data: prevRun } = await db
+    .from('gbp_rank')
+    .select('run_id')
+    .eq('site_key', site.site_key)
+    .neq('run_id', runId)
+    .order('fetched_at', { ascending: false })
+    .limit(1);
+  const prevBest = new Map<string, number | null>();
+  if (prevRun?.[0]) {
+    const { data: prevRows } = await db
+      .from('gbp_rank')
+      .select('query, rank, is_ours, vantage')
+      .eq('site_key', site.site_key)
+      .eq('run_id', prevRun[0].run_id)
+      .eq('vantage', 'centre');
+    for (const r of prevRows ?? []) if (!prevBest.has(r.query)) prevBest.set(r.query, null);
+    for (const r of prevRows ?? []) if (r.is_ours) prevBest.set(r.query, r.rank);
+  }
   for (let i = 0; i < rankRows.length; i += 200) {
     const { error } = await db.from('gbp_rank').insert(rankRows.slice(i, i + 200));
     if (error) throw new Error(`gbp_rank : ${error.message}`);
+  }
+  if (leaderRows.length) {
+    const { error } = await db.from('gbp_leader_snapshots').insert(leaderRows);
+    if (error) throw new Error(`gbp_leader_snapshots : ${error.message}`);
   }
   if (reviews.length) {
     const { error } = await db.from('gbp_reviews').upsert(
@@ -292,10 +411,53 @@ async function scanListing(
           }
         : {}),
       pending_reviews_task: pendingTask,
+      duplicates,
       updated_at: now,
     })
     .eq('id', listing.id);
   if (lErr) throw new Error(`gbp_listings : ${lErr.message}`);
+
+  // Entrées et sorties du top 3 au centre, par rapport au passage précédent.
+  const moves: string[] = [];
+  for (const [query, best] of ourBestCentre) {
+    if (!prevBest.has(query)) continue;
+    const before = prevBest.get(query) ?? null;
+    const inNow = best !== null && best <= 3;
+    const inBefore = before !== null && before <= 3;
+    if (inNow && !inBefore) moves.push(`✅ entre dans le pack sur « ${query} » (#${best})`);
+    if (!inNow && inBefore)
+      moves.push(`❌ sort du pack sur « ${query} » (était #${before}, ${best ? `#${best}` : 'absente'})`);
+  }
+  if (moves.length)
+    await sendTelegram(`📍 <b>Pack local — ${site.name ?? site.site_key}</b>\n${moves.join('\n')}`);
+
+  // Avis négatif sans réponse depuis plus de 48 h : à traiter avant tout le reste.
+  const { data: negatives } = await db
+    .from('gbp_reviews')
+    .select('author, rating, text, published_at')
+    .eq('listing_id', listing.id)
+    .lte('rating', 2)
+    .is('owner_reply', null)
+    .neq('reply_status', 'posted');
+  const stale = (negatives ?? []).filter(
+    (r) =>
+      r.published_at && Date.now() - new Date(r.published_at).getTime() > NEGATIVE_ALERT_HOURS * 3_600_000,
+  );
+  if (stale.length)
+    await sendTelegram(
+      `⚠️ <b>${stale.length} avis négatif(s) sans réponse</b> — ${site.name ?? site.site_key}\n` +
+        stale
+          .map(
+            (r) =>
+              `${'★'.repeat(Math.round(r.rating ?? 0))} ${r.author ?? 'Anonyme'} — ${(r.text ?? '(sans texte)').slice(0, 120)}`,
+          )
+          .join('\n') +
+        `\n\n<i>Réponse à rédiger dans /gbp.</i>`,
+    );
+  if (duplicates.length)
+    await sendTelegram(
+      `⚠️ <b>Fiche en double ?</b> — ${site.name ?? site.site_key}\n${duplicates.map((d) => `${d.name} (CID ${d.cid}, ${d.reason})`).join('\n')}`,
+    );
 
   // Un nouvel avis = une réponse à écrire : l'admin le sait tout de suite.
   if (!firstPass && fresh.length) {
@@ -310,7 +472,15 @@ async function scanListing(
     );
   }
 
-  return { listing: listing.cid, queries: queries.length, ranked, reviews_new: fresh.length, cost };
+  return {
+    listing: listing.cid,
+    queries: queries.length,
+    ranked,
+    reviews_new: fresh.length,
+    leaders: leaderRows.length,
+    duplicates: duplicates.length,
+    cost,
+  };
 }
 
 async function main() {
@@ -358,6 +528,8 @@ async function main() {
           queries: 0,
           ranked: 0,
           reviews_new: 0,
+          leaders: 0,
+          duplicates: 0,
           cost,
           skipped: 'à confirmer',
         };
@@ -367,6 +539,8 @@ async function main() {
           queries: 0,
           ranked: 0,
           reviews_new: 0,
+          leaders: 0,
+          duplicates: 0,
           cost: 0,
           skipped: 'candidate non confirmée',
         };
@@ -379,6 +553,8 @@ async function main() {
         queries: 0,
         ranked: 0,
         reviews_new: 0,
+        leaders: 0,
+        duplicates: 0,
         cost: 0,
         skipped: (e as Error).message,
       };
