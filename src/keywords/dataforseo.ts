@@ -16,7 +16,7 @@
  */
 
 import * as logger from '../utils/logger.js';
-import { withDfsCache } from '../dataforseo/cache.js';
+import { withDfsCache, type DfsCacheOptions } from '../dataforseo/cache.js';
 import { env } from '../config/env.js';
 
 // ─── Config ──────────────────────────────────────────────────
@@ -76,9 +76,32 @@ export interface KeywordResearchResult {
 
 // ─── API Caller ──────────────────────────────────────────────
 
-export async function callApi<T>(endpoint: string, body: unknown[], retries = 2): Promise<T> {
+export async function callApi<T>(
+  endpoint: string,
+  body: unknown[],
+  retries = 2,
+  cache: DfsCacheOptions = {},
+): Promise<T> {
+  // `ttlDays: 0` = pas de cache du tout (pose d'une tâche asynchrone : l'identifiant
+  // rendu n'est bon qu'une fois, et la réponse 20100 « Task Created » n'est pas un résultat).
+  if (cache.ttlDays === 0) return callApiLive<T>(endpoint, body, retries);
   // Cache d'abord : une requête identique déjà achetée n'est pas repayée (W0.3).
-  return withDfsCache(endpoint, body, () => callApiLive<T>(endpoint, body, retries));
+  return withDfsCache(endpoint, body, () => callApiLive<T>(endpoint, body, retries), cache);
+}
+
+/**
+ * Lecture GET sans cache — relecture d'une tâche asynchrone (`task_get/<id>`) :
+ * la réponse change jusqu'à ce que la tâche soit prête, elle ne se met pas en cache ici.
+ */
+export async function callApiGet<T>(endpoint: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${endpoint}`, { headers: { Authorization: getAuthHeader() } });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`DataForSEO API error ${response.status}: ${text.slice(0, 200)}`);
+  }
+  const data = (await response.json()) as { status_code?: number; status_message?: string };
+  if (data.status_code !== 20000) throw new Error(`DataForSEO error: ${data.status_message}`);
+  return data as T;
 }
 
 async function callApiLive<T>(endpoint: string, body: unknown[], retries = 2): Promise<T> {

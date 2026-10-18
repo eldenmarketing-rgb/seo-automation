@@ -74,7 +74,7 @@ le mot de passe circule en clair, HTTPS reste à poser.
 husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`.
 
 ### Pages
-`/` (plan d'action), `/backlog`, `/chantiers`, `/gsc`, `/indexation`, `/concurrents`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/sites`.
+`/` (plan d'action), `/backlog`, `/chantiers`, `/gsc`, `/indexation`, `/concurrents`, `/keywords`, `/clusters`, `/pages` (onglets **Liste · Pipeline · Cannibalisation**), `/backlinks`, `/gbp` (Fiches Google), `/sites`.
 `/pipeline` et `/cannibalization` redirigent en 308 vers les onglets de `/pages` (`next.config.ts`).
 
 ### Navigation, périmètre, pagination (2026-08-28)
@@ -96,7 +96,7 @@ husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`
 `/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/tasks` (GET/POST, + `[id]` PATCH/DELETE, + `[id]/promote` POST), `/api/gsc` (+ `sync` POST), `/api/briefs/prepare` (GET) + `/api/briefs/generate` (POST, overrides), `/api/generate/prompt` (GET
 `?page_id=`/`?cluster_id=` — le prompt de génération exact en texte brut, lien « Voir le prompt » dans
 l'éditeur ; assemblage partagé `src/lib/generation-prompt.ts`, prompt intégral aussi loggé dans
-`automation_logs.details.prompt`), `/api/pages/retype` (POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`, `/api/concurrents` (GET `?site=` modèle + verdict, POST ajout ; `[id]` PATCH/DELETE ; `scan` POST = lance `src/jobs/competitors-scan.ts --apply --site=`), `/api/jobs` (POST : crée le journal d'un brief/génération, + `[id]` GET : progression — `job_id` accepté par `/api/briefs/generate` et `/api/generate`)
+`automation_logs.details.prompt`), `/api/pages/retype` (POST), `/api/keywords` (paginé, `status=`, `counts`), `/api/keywords/suggestions`, `/api/keywords/analyze`, `/api/keywords/create-page`, `/api/pages`, `/api/pages/publish`, `/api/clusters`, `/api/clusters/triage`, `/api/cannibalization`, `/api/pipeline`, `/api/chat`, `/api/backlinks` (+ `/api/backlinks/[id]` PATCH/DELETE), `/api/sites` (GET/POST, + `[key]` GET/PATCH), `/api/indexation`, `/api/concurrents` (GET `?site=` modèle + verdict, POST ajout ; `[id]` PATCH/DELETE ; `scan` POST = lance `src/jobs/competitors-scan.ts --apply --site=`), `/api/jobs` (POST : crée le journal d'un brief/génération, + `[id]` GET : progression — `job_id` accepté par `/api/briefs/generate` et `/api/generate`), `/api/gbp` (GET `?site=` modèle + verdict, sans site = résumé ; `listings` POST saisie d'un CID confirmé, `listings/[id]` PATCH/DELETE statut + horaires du site ; `reviews/[id]` PATCH réponse ; `scan` POST = lance `src/jobs/gbp-scan.ts --apply --site=`)
 
 ### Module Backlog SEO (meilleure prochaine action, multi-sites)
 Table `opportunities` réutilisée comme **backlog d'actions SEO** (15 types : CREATE_PAGE, OPTIMIZE_PAGE, UPDATE_CONTENT, FIX_CANNIBALIZATION, BACKLINK, GBP_OPTIMIZATION, NO_ACTION…). Priorité = **impact × confiance × valeur_site ÷ effort** — aucun bonus artificiel pour le contenu. 4 détecteurs automatiques dans `src/lib/backlog.ts` (dashboard) lisent `gsc_positions` : quick wins (pos 4-20), CTR faible vs CTR attendu, déclin (28j vs 28j précédents), cannibalisation GSC (même requête → plusieurs URLs). Scan : bouton dashboard ou `curl -X POST localhost:3000/api/backlog/scan` (cron lundi 7h30). Statuts : new → planned → done/dismissed. Passer une action `done` fixe `completed_at` et déclenche les mesures baseline/J+7/J+28/J+60/J+90 dans `seo_measurements` aux scans suivants. Les actions manuelles/CLI utilisent `source` ≠ `scan:*` et survivent aux re-scans ; les BACKLINK restent pilotés par `backlink_tasks`.
@@ -228,6 +228,27 @@ est signalée, jamais tue. Les totaux viennent toujours de `gsc_page_daily` ; le
 ### Module Backlinks (autorité off-page)
 Tables Supabase `backlink_targets` (catalogue : annuaires, web2, presse, fournisseurs…) + `backlink_tasks` (tracker par site). Seed : `npx tsx scripts/seed-backlinks.ts` (idempotent, importe les kits S-Party/VTC). Les anciennes tables `directories`/`directory_submissions` sont orphelines (importées, conservées).
 
+### Module Fiches Google (GBP) — « le pack local décide » (2026-10-18)
+Page `/gbp` (Autorité) + `/api/gbp`. Constat Livraison de Nuit du 18/10 : sur les requêtes locales qui comptent,
+le pack local est au-dessus de l'organique et nos fiches n'y sont pas (14 avis contre 245 pour le leader).
+**Plan en 4 lots** (`~/.claude/plans/sharded-booping-pie.md`) : 1) demande d'avis par SMS (`/avis`, livré) ;
+2) registre des fiches + suivi hebdo + action backlog (livré) ; 3) contenu à coller (réponses aux avis, posts,
+visuels, Q&R) ; 4) publication par l'API Google Business Profile (accès sur formulaire, projet Cloud
+`seo-automatisation-478810` n° 21878562314, demande depuis le compte Google propriétaire de la fiche).
+- **Faits** (seo-automation `src/gbp/` + `src/jobs/gbp-scan.ts`, `npm run gbp`, cron lundi 7h20) : fiche par
+  `my_business_info` (keyword `cid:<cid>` — `cid` seul est refusé), pack local par `serp/google/maps`
+  (`location_coordinate` = centre de la ville du site, `src/gbp/geo.ts`, zoom 12) sur les requêtes du site
+  (même sélection que Concurrents, ≤ 20), avis par `business_data/google/reviews` (asynchrone : `task_post` sans
+  cache `ttlDays: 0`, `task_get` en GET `callApiGet`, tâche pas prête gardée dans `pending_reviews_task`).
+  **Opt-in** : seule une fiche `confirmed` est suivie ; un site actif sans fiche reçoit une `candidate` (nom + ville)
+  à confirmer dans `/gbp`, ou un CID saisi (lien Maps `?cid=`). Nouvel avis → Telegram admin.
+- **Verdict** (dashboard `src/lib/gbp.ts`, `GBP_CONFIG`, le premier vrai domine) : `fiche` (aucune confirmée) →
+  `pack` (hors des 3 premiers sur ≥ 50 % des 10 requêtes de tête) → `categorie` (≠ celle des leaders du pack) →
+  `avis` (votes < ¼ de la médiane des 3 premiers) → `horaires` (fiche ≠ `hours_expected` saisi) → `ok`.
+- **Action** : une `GBP_OPTIMIZATION` par site, `source = scan:gbp`, `details.lines` = preuves ; elle remplace celle
+  du module Concurrents pour le même site. Contrainte `opportunities_sources_check` étendue à `gbp` dans la migration.
+- Piège vu le 18/10 : aucun 09 SMS en stock chez Twilio ; les SMS partent d'un 09 39 du CRM garage.
+
 ### Module Concurrents — « pourquoi je suis derrière » (2026-08-30)
 Page `/concurrents` (Constater) + `/api/concurrents`. Répond « qui est devant, avec quoi, et quel
 facteur domine », jamais « quelles pages ils ont » : la preuve Carrosserie du 28/08 (pages meilleures
@@ -333,6 +354,7 @@ npm run bot            # Bot Telegram (tsx src/bot/index.ts) — pm2 seo-bot en 
 npm run crawl          # Crawl + funnel d'indexation (tsx scripts/crawl.ts) — simulation par défaut, -- --apply écrit
 npm run gsc-sync       # Search Console → gsc_positions (-- --site=vtc, -- --backfill, -- --trigger=…)
 npm run competitors    # Module Concurrents : SERP + liens + pages des concurrents (simulation ; -- --apply, --site=, --suggest)
+npm run gbp            # Module Fiches Google : fiche, pack local Maps, avis (simulation ; -- --apply, --site=, --max-queries=)
 npm run audit          # Audit GSC hebdomadaire (tsx src/jobs/weekly-gsc-audit.ts)
 npm run cluster        # Clustering des mots-clés découverts (tsx src/jobs/weekly-clustering.ts)
 npm run status         # État du système : env, sites actifs, hooks, crons — aucune écriture
@@ -353,6 +375,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 |-------|------|---------------|
 | seo_pages | Pages SEO générées | site_key, slug, city, service, **page_type** (service/city/city_service/hub/category/article/product/home/utility), **parent_id** (page parente : accueil/hub/catégorie — fixe le préfixe d'URL et la liste qui reprend la page côté site ; `src/lib/parents.ts` du dashboard, préfixe **déduit** des pages déjà rattachées, jamais déclaré), content (JSONB, dont `brief.instructions` et **`card`** = titre/accroche/description/badges/featured affichés par le parent), status (draft/published/optimized/error/redirected/brief_ready/**external**), **redirect_to** (cible d'une ligne `redirected`, chemin absolu — servie en redirection permanente par les sites CMS via `getRedirect` quand aucune page publiée ne répond, les 301 de `next.config` passant avant ; RLS anon = `published` + `redirected` ; migration `migration-redirects.sql` 2026-08-30), deployed_revision_id |
 | site_tasks | **Chantiers — le carnet de bord** (ce que le user décide ; aucun job n'y touche) | site_key (nullable = transverse, sans FK), title, body, status (inbox/todo/doing/blocked/idea/done/dropped), blocked_by, pinned, due, source (dashboard/telegram/seed:*), opportunity_id (note promue au backlog), done_at ; migration `migration-site-tasks.sql` |
+| gbp_listings · gbp_snapshots · gbp_rank · gbp_reviews · gbp_posts | **Module Fiches Google (GBP)** — faits du job `gbp-scan` (lundi 7h20, fiches `confirmed` seulement ; un site actif sans fiche reçoit une `candidate` par nom + ville) ; lire via `v_gbp_snapshots_latest` / `v_gbp_rank_latest` ; verdict et action côté dashboard (`src/lib/gbp.ts`, `gbp-detectors.ts`, source `scan:gbp`) ; migration `migration-gbp.sql` | gbp_listings : site_key, cid, place_id, status (candidate/confirmed/ignored), origin, primary_category, categories[], hours (jsonb DataForSEO), hours_expected (saisi), rating, votes, photos, maps_url, review_url, pending_reviews_task · gbp_rank : run_id, query, query_source, rank, cid, name, category, rating, votes, is_ours · gbp_reviews : review_id, author, rating, text, owner_reply, reply_draft, reply_status · gbp_posts : kind, title, body, cta_url, image_path, scheduled_for, status |
 | review_requests | **Demandes d'avis Google par SMS** (bot `/avis`, module GBP lot 1, 2026-10-18) — le numéro ne sert qu'au délai de 60 j et à STOP ; migration `migration-gbp.sql` | site_key, phone_e164, channel (sms/manual), status (sent/delivered/failed/opted_out), twilio_sid, segments, requested_by, sent_at |
 | site_leads | **Demandes laissées dans les formulaires des sites** (route `/api/lead` du site — reprog depuis le 2026-10-01, site sans téléphone) ; RLS : la clé anon **insère** seulement, ne relit rien ; chaque demande part aussi sur Telegram (chat admin) ; migration `migration-site-leads.sql` | site_key, first_name, email, phone, profile, message, source_path, referrer, utm (JSONB), status (new/contacted/won/lost/spam) |
 | opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
@@ -388,6 +411,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 30 6 * * *   Sync GSC → gsc_positions (QUOTIDIEN, en tête de chaîne le lundi) — src/jobs/gsc-sync.ts --trigger=cron
 45 6 * * 1   Crawl + funnel d'indexation → crawl_results + crawl_site_checks — scripts/crawl.ts --apply (~1 min/site)
 10 7 * * 1   Concurrents → competitor_serp + competitor_snapshots — src/jobs/competitors-scan.ts --apply (sites opt-in)
+20 7 * * 1   Fiches Google → gbp_snapshots + gbp_rank + gbp_reviews — src/jobs/gbp-scan.ts --apply (fiches confirmées ; ~0,05 $/fiche)
 30 7 * * 1   Scan backlog SEO — détecteurs + mesures (curl POST /api/backlog/scan sur le dashboard pm2)
 0 8 * * 1    Audit GSC hebdomadaire (lundi)
 0 22 * * 0   Clustering keywords hebdomadaire (dimanche)

@@ -44,6 +44,8 @@ cat >> /tmp/crontab_clean << EOF
 # Après le crawl (le verdict lit v_crawl_latest), avant le scan backlog de 7h30 qui $MARKER
 # transforme le verdict en actions. Opt-in : seuls les sites ayant des concurrents déclarés. $MARKER
 10 7 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/competitors-scan.ts --apply --trigger=cron >> $LOG_FILE 2>&1 $MARKER
+# Fiches Google : fiche, pack local, avis (fiches confirmées seulement)
+20 7 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gbp-scan.ts --apply --trigger=cron >> $LOG_FILE 2>&1 $MARKER
 
 # Weekly backlog scan — détecteurs SEO + mesures (Monday 7:30 AM, après la sync ET le crawl, via le dashboard pm2) $MARKER
 # Les identifiants Basic Auth sont lus depuis .env.local du dashboard (jamais dans git) $MARKER
