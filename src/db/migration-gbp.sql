@@ -222,3 +222,11 @@ CREATE OR REPLACE VIEW v_gbp_leaders_latest AS
 ALTER TABLE gbp_leader_snapshots ENABLE ROW LEVEL SECURITY;
 -- Doublons possibles de la fiche (même téléphone ou même domaine, autre CID) vus dans Maps.
 ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS duplicates JSONB;
+
+-- La vue créée avant la colonne `vantage` avait figé sa liste de colonnes et ne
+-- renvoyait plus le dernier passage : on la recrée sur « le run le plus récent du site ».
+DROP VIEW IF EXISTS v_gbp_rank_latest;
+CREATE VIEW v_gbp_rank_latest AS
+  SELECT r.* FROM gbp_rank r
+  JOIN (SELECT DISTINCT ON (site_key) site_key, run_id FROM gbp_rank ORDER BY site_key, fetched_at DESC) l
+    ON l.site_key = r.site_key AND l.run_id = r.run_id;
