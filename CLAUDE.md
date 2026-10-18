@@ -247,6 +247,12 @@ visuels, Q&R) ; 4) publication par l'API Google Business Profile (accès sur for
   `avis` (votes < ¼ de la médiane des 3 premiers) → `horaires` (fiche ≠ `hours_expected` saisi) → `ok`.
 - **Action** : une `GBP_OPTIMIZATION` par site, `source = scan:gbp`, `details.lines` = preuves ; elle remplace celle
   du module Concurrents pour le même site. Contrainte `opportunities_sources_check` étendue à `gbp` dans la migration.
+- **Contenu préparé (lot 3, 2026-10-18)** : dashboard `src/lib/gbp-content.ts` (Claude CLI, faits = `buildFactsBlock` +
+  catalogue `products` avec prix réels + pages publiées ; interdits : prix/délai/promesse inventés, URL/tél dans la
+  description) — `POST /api/gbp/reviews/[id]/draft` (réponse 180-400 car., vouvoiement, signée), `POST /api/gbp/posts/propose`
+  (4 posts, un par lundi à venir, image + lien du catalogue, `gbp_posts` draft → ready → posted ; `PATCH/DELETE
+  /api/gbp/posts/[id]`), `POST /api/gbp/profile-text` (description ≤ 750 car. coupée en fin de phrase + 5 Q&R →
+  `gbp_listings.description_draft/qa_draft`). Tout se copie-colle dans la fiche ; la publication par l'API reste un clic.
 - **API Google câblée (lot 4, 2026-10-18)** : dashboard `src/lib/gbp-google.ts` + routes `/api/gbp/oauth{,/start,/callback}`
   (jeton OAuth dans `seo-dashboard/.env.gbp-token.json`, ignoré par git, scope `business.manage`), `/api/gbp/google/locations`
   (comptes + emplacements, rapprochés par place ID), `/api/gbp/google/sync` (fiche + avis avec leur nom Google →
