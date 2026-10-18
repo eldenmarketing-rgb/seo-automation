@@ -414,15 +414,39 @@ export async function crawlSite(
   // vérité qu'on vient de démentir.
   const { data: profil } = await db
     .from('site_profiles')
-    .select('delivery_mode')
+    .select('delivery_mode, services')
     .eq('site_key', site.site_key)
     .maybeSingle();
-  const siteEnCms = (profil as { delivery_mode?: string } | null)?.delivery_mode === 'cms';
+  const profile = profil as { delivery_mode?: string; services?: { slug?: string }[] } | null;
+  const siteEnCms = profile?.delivery_mode === 'cms';
+  // Sur un site CMS, certaines URL répondent 200 AVANT publication parce que le
+  // code rend un gabarit en attendant le texte : les pages catalogue (`produit/`,
+  // `categorie/`, grille et fiche servies depuis `products`) et les services
+  // déclarés dans le code du site (repli de lancement, `site_profiles.services`).
+  // Un brouillon à ces adresses n'est pas « rendu hors CMS » : il attend d'être
+  // publié. Le basculer en `external` interdirait sa publication (constat du
+  // 2026-10-18 sur Livraison de Nuit : 34 brouillons basculés par le crawl).
+  const codeSlugs = new Set(
+    (profile?.services ?? [])
+      .map((s) => (s.slug ?? '').replace(/^\//, '').replace(/\/$/, ''))
+      .filter(Boolean),
+  );
+  const CATALOGUE = /^(produit|categorie)\//;
+  const renduParLeCodeEnAttente = (url: string) => {
+    const path = new URL(url).pathname.replace(/^\//, '').replace(/\/$/, '');
+    return CATALOGUE.test(path) || codeSlugs.has(path);
+  };
 
   const alignements: Alignement[] = [];
   for (const c of crawled) {
     const dbPage = dbByKey.get(normalizeUrl(c.url));
     if (!dbPage) continue;
+    if (
+      siteEnCms &&
+      ['draft', 'brief_ready', 'error'].includes(dbPage.status) &&
+      renduParLeCodeEnAttente(c.url)
+    )
+      continue;
     const prouve = statutProuve(c.row, dbPage.status, siteEnCms);
     if (!prouve || prouve.statut === dbPage.status) continue;
 
