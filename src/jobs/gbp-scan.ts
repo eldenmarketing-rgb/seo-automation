@@ -194,7 +194,11 @@ async function scanListing(
   let reviews: ReviewFacts[] = [];
   let pendingTask: string | null = null;
   try {
-    if (listing.pending_reviews_task) {
+    if (listing.google_location) {
+      // Fiche reliée à l'API Google : les avis viennent de Google (dashboard, « Synchroniser »),
+      // avec leur identifiant officiel — DataForSEO en donnerait un autre, donc des doublons.
+      console.log('  Avis : lus par l’API Google (fiche reliée), DataForSEO non appelé');
+    } else if (listing.pending_reviews_task) {
       const r = await getReviewsTask(listing.pending_reviews_task);
       if (r) {
         reviews = r.reviews;
@@ -321,7 +325,7 @@ async function main() {
   if (error) throw new Error(`Registre des sites : ${error.message}`);
   const { data: listingRows, error: lErr } = await db
     .from('gbp_listings')
-    .select('id, site_key, cid, place_id, name, status, pending_reviews_task');
+    .select('id, site_key, cid, place_id, name, status, pending_reviews_task, google_location');
   if (lErr) throw new Error(`gbp_listings : ${lErr.message}`);
   const listings = (listingRows ?? []) as GbpListingRow[];
 

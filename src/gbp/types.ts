@@ -47,4 +47,5 @@ export interface GbpListingRow {
   name: string | null;
   status: 'candidate' | 'confirmed' | 'ignored';
   pending_reviews_task: string | null;
+  google_location: string | null;
 }

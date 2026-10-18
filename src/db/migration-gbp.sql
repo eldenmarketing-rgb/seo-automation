@@ -173,3 +173,14 @@ ALTER TABLE gbp_posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE opportunities DROP CONSTRAINT IF EXISTS opportunities_sources_check;
 ALTER TABLE opportunities ADD CONSTRAINT opportunities_sources_check
   CHECK (sources <@ ARRAY['gsc','crawl','dataforseo','serp','cluster','backlinks','manual','keywords','competitors','gbp']::text[]);
+
+-- ─── Lot 4 : rattachement à l'API Google Business Profile ─────────────────────
+-- Le jeton OAuth vit dans un fichier du dashboard (jamais en base) ; la base ne
+-- garde que les identifiants d'emplacement Google de chaque fiche confirmée.
+ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS google_account TEXT;   -- « accounts/123 »
+ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS google_location TEXT;  -- « locations/456 »
+ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS google_synced_at TIMESTAMPTZ;
+-- Un avis lu par l'API porte son nom Google (`accounts/…/reviews/…`) : c'est lui qu'on répond.
+ALTER TABLE gbp_reviews ADD COLUMN IF NOT EXISTS google_name TEXT;
+ALTER TABLE gbp_posts ADD COLUMN IF NOT EXISTS google_name TEXT;
+ALTER TABLE gbp_posts ADD COLUMN IF NOT EXISTS error TEXT;
