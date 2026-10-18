@@ -184,3 +184,7 @@ ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS google_synced_at TIMESTAMPTZ;
 ALTER TABLE gbp_reviews ADD COLUMN IF NOT EXISTS google_name TEXT;
 ALTER TABLE gbp_posts ADD COLUMN IF NOT EXISTS google_name TEXT;
 ALTER TABLE gbp_posts ADD COLUMN IF NOT EXISTS error TEXT;
+
+-- ─── Lot 3 : textes de la fiche préparés par l'outil (à coller) ───────────────
+ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS description_draft TEXT;
+ALTER TABLE gbp_listings ADD COLUMN IF NOT EXISTS qa_draft JSONB;
