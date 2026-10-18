@@ -6,8 +6,7 @@
  *
  * Faits utilisés, et rien d'autre : 20h-4h 7j/7 fériés compris · Perpignan + ~15 km (19 communes) ·
  * une trentaine de minutes, un peu plus vers le littoral · commande par téléphone, total confirmé
- * avant le départ · paiement CB ou espèces à la livraison · majeurs uniquement, pièce d'identité
- * possible · produits et prix = catalogue `products` du site (seed-nuit-catalogue.mts). Les softs
+ * avant le départ · paiement CB ou espèces à la livraison · majeurs uniquement · produits et prix = catalogue `products` du site (seed-nuit-catalogue.mts). Les softs
  * existent (formules, ancien site) mais sans référence au catalogue : « sur demande au téléphone ».
  * Aucun minimum de commande, aucun frais, aucun avis, aucune ancienneté n'est affirmé.
  *
@@ -56,13 +55,13 @@ const L = {
 };
 
 const AGE =
-  "La vente d'alcool est interdite aux mineurs : nous livrons uniquement des personnes majeures et une pièce d'identité peut être demandée à la porte. L'abus d'alcool est dangereux pour la santé, à consommer avec modération.";
+  "La vente d'alcool est interdite aux mineurs : nous livrons uniquement des personnes majeures. L'abus d'alcool est dangereux pour la santé, à consommer avec modération.";
 
 const FAQ_COMMUNE = (ville: string, delai: string) => [
   { question: `Jusqu'à quelle heure livrez-vous à ${ville} ?`, answer: `Tous les soirs de 20h à 4h du matin, 7 jours sur 7, jours fériés compris, à ${ville} comme à Perpignan.` },
   { question: `Combien de temps pour être livré à ${ville} ?`, answer: delai },
   { question: "Comment je paie ?", answer: "À la livraison, par carte bancaire ou en espèces. Le total est confirmé au téléphone au moment de la commande, il n'y a rien à payer en ligne." },
-  { question: "Faut-il être majeur ?", answer: "Oui. La vente d'alcool est interdite aux mineurs et une pièce d'identité peut être demandée à la livraison." },
+  { question: "Faut-il être majeur ?", answer: "Oui. La vente d'alcool est interdite aux mineurs." },
 ];
 
 const pages: Page[] = [
@@ -119,7 +118,7 @@ const pages: Page[] = [
       { question: "Comment je commande ?", answer: "Par téléphone, au " + TEL + ". Vous dites ce qu'il vous faut et votre adresse, on confirme le total et le délai, on part. Pas de commande en ligne, pas de compte à créer." },
       { question: "Comment je paie ?", answer: "À la livraison, par carte bancaire ou en espèces. Rien à payer en ligne." },
       { question: "Vous avez des softs et des glaçons ?", answer: "Les softs se commandent au téléphone avec la bouteille, et nos formules en contiennent déjà un. Pour le reste, demandez : on vous dit ce qui est disponible ce soir." },
-      { question: "Faut-il être majeur ?", answer: "Oui. La vente d'alcool est interdite aux mineurs et une pièce d'identité peut être demandée à la livraison." },
+      { question: "Faut-il être majeur ?", answer: "Oui. La vente d'alcool est interdite aux mineurs." },
     ],
     links: [L.formules, L.epicerie, L.vodkas],
   },
@@ -177,7 +176,7 @@ const pages: Page[] = [
       { question: "Il y a un minimum de commande ?", answer: "Dites-nous ce qu'il vous faut, on vous annonce le total au téléphone avant de partir. Vous décidez en connaissance de cause." },
       { question: "En combien de temps ?", answer: "Une trentaine de minutes en moyenne à Perpignan et dans les communes proches, un peu plus vers la côte." },
       { question: "Comment je paie ?", answer: "À la livraison, par carte bancaire ou en espèces." },
-      { question: "Et si je suis mineur ?", answer: "Nous ne livrons pas d'alcool aux mineurs, et une pièce d'identité peut être demandée à la porte." },
+      { question: "Et si je suis mineur ?", answer: "Nous ne livrons pas d'alcool aux mineurs." },
     ],
     links: [L.apero, L.bieres, L.snacks],
   },
