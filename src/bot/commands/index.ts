@@ -24,6 +24,7 @@ import { registerPhoneCommand } from './phone.js';
 import { registerVoitureCommand } from './voiture.js';
 import { registerProduitCommand } from './produit.js';
 import { registerNoteCommand } from './note.js';
+import { registerAvisCommand } from './avis.js';
 
 export interface BotCommandDef {
   /** Nom sans le slash, tel que tapé dans Telegram. */
@@ -61,6 +62,13 @@ export const BOT_COMMANDS: readonly BotCommandDef[] = [
     usage: '/note [site:] texte — Noter un chantier (vide = liste, « fait <ref> » = clore)',
     access: 'admin',
     register: registerNoteCommand,
+  },
+  {
+    name: 'avis',
+    usage:
+      '/avis 06 12 34 56 78 [site] — SMS de demande d’avis Google après livraison (vide = dernières demandes)',
+    access: 'group',
+    register: registerAvisCommand,
   },
   {
     name: 'status',

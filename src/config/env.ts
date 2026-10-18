@@ -46,6 +46,14 @@ const SPEC = {
   DATAFORSEO_LOGIN: { required: false, doc: 'Identifiant API DataForSEO' },
   DATAFORSEO_PASSWORD: { required: false, doc: 'Mot de passe API DataForSEO' },
 
+  // Twilio — numéros trackés (TwiML servi par les sites) et SMS de demande d'avis (`/avis`)
+  TWILIO_ACCOUNT_SID: { required: false, doc: 'Compte Twilio (ACxxxx)' },
+  TWILIO_AUTH_TOKEN: { required: false, doc: 'Jeton du compte Twilio' },
+  TWILIO_SMS_FROM: {
+    required: false,
+    doc: 'Numéro expéditeur des SMS (E.164, capacité SMS — un 09 du compte)',
+  },
+
   // Anthropic — plus utilisé par les jobs (human-in-the-loop via CLI/dashboard), gardé pour les scripts
   ANTHROPIC_API_KEY: { required: false, doc: 'Clé API Claude (optionnelle)' },
 
@@ -109,6 +117,15 @@ export const env = {
   },
   get DATAFORSEO_PASSWORD(): string | undefined {
     return read('DATAFORSEO_PASSWORD');
+  },
+  get TWILIO_ACCOUNT_SID(): string | undefined {
+    return read('TWILIO_ACCOUNT_SID');
+  },
+  get TWILIO_AUTH_TOKEN(): string | undefined {
+    return read('TWILIO_AUTH_TOKEN');
+  },
+  get TWILIO_SMS_FROM(): string | undefined {
+    return read('TWILIO_SMS_FROM');
   },
   get ANTHROPIC_API_KEY(): string | undefined {
     return read('ANTHROPIC_API_KEY');

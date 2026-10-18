@@ -164,6 +164,22 @@ Perpignan une fois dans le H1, jamais dans les H2 ni la 1re phrase de l'intro �
 (condense une révision `pending`), `check-garage-v7.mts` (règles), `apply-garage-v7.mts` (propose + applique
 par `/rollback`). Le gabarit du site rend désormais les titres de section en H2 (Site_Garage `01dc1fd`).
 
+### Boutiques (template ecom-starter) — fiches produit et catalogue (2026-10-14)
+Une boutique = site `mode = product`, `delivery_mode = cms`. **Le commercial** (nom, prix, variantes,
+stock, photos, caractéristiques) vit dans `products` / `product_variants` / `product_categories`, édité
+dans `/admin` du site. **Le rédactionnel SEO** vit dans `seo_pages` : `categorie/<slug>` (texte éditorial
+de la page catégorie), **`produit/<slug>`** (H1, meta, intro, sections, FAQ de la fiche), `conseils/…`
+(guides). La fiche affiche le texte CMS **ou** la description admin, jamais les deux. Dashboard :
+type `product` rédigeable ; requête de tête = GSC → **nom du produit + attribut dominant**
+(`src/lib/product-facts.ts`, lu dans le catalogue — jsonb trie les clés, d'où l'ordre de préférence) ;
+bloc **FAITS PRODUIT** dans le prompt (caractéristiques, déclinaisons ; prix/stock/délai INTERDITS) ;
+`POST /api/pages/publish` refuse `produit/<slug>` sans produit `published`/`sold_out` de ce slug (409
+`no_product`). Backlog : pour un site `product`, CREATE_PAGE porte `details.kind` (`category` si requête
+générique sans qualificatif du catalogue, sinon `product`) et `suggested_slug` préfixé ; une requête qui
+recouvre une catégorie existante devient OPTIMIZE_PAGE sur `/categorie/<slug>`. **Ordre impératif** :
+inscrire la boutique sur `/sites` avant `import-inventaire` (qui saute alors `/produit/*` et
+`/categorie/*` ; sinon ces URL entrent en `external` et bloquent la publication du même slug).
+
 ### Sources des nouvelles pages — GSC d'abord, mots-clés en repli
 **Site avec du signal** (≥ 100 impressions / 28 j) : les CREATE_PAGE viennent de `gsc_positions`
 — « Google te montre déjà sur cette requête sans page dédiée » = demande **prouvée sur le domaine**.
@@ -258,6 +274,7 @@ et `ADMIN_ONLY_COMMANDS` en découlent, rien n'est recopié.
 | /voiture | Ajout véhicule 12 étapes (photos, data, commit git, deploy) | Groupes voitures/okaz + admin |
 | /produit | Catalogue restaurant (ajout, prix, dispo, commit git, deploy) | Groupe restaurant + admin |
 | /note | Carnet de bord : noter un chantier (`/note` seul = liste, `/note fait <ref>` = clore) | Admin |
+| /avis | SMS de demande d'avis Google après livraison (`/avis 06… [site]`, vide = dernières demandes) — Twilio `TWILIO_SMS_FROM`, lien court `https://<domaine>/avis/google`, 1 SMS / numéro / 60 j, STOP respecté, journal `review_requests` | Admin + groupe du site |
 | /status, /seo, /index, /monitor, /ping, /deploy, /phone | Exploitation (pages, GSC, indexation, uptime, Vercel, téléphone) | Admin |
 
 Les commandes IA (`/generate`, `/approve`, `/blog`, `/edit`, `/enrichir`, `/ctr`, `/keywords`,
@@ -304,7 +321,7 @@ La gestion SEO se fait via le dashboard.
 
 ### Permissions
 - Admin : chat ID `6240980049` — accès total
-- Groupe voitures : `-5206230663` — accès /help, /voiture
+- Groupe voitures (Ideo Car) : `-1004307673161` (supergroupe depuis le 2026-10-13 ; ancien id `-5206230663` conservé) — accès /help, /voiture
 - Groupe restaurant : `-5057411991` — accès /help, /produit
 
 ---
@@ -336,6 +353,7 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 |-------|------|---------------|
 | seo_pages | Pages SEO générées | site_key, slug, city, service, **page_type** (service/city/city_service/hub/category/article/product/home/utility), **parent_id** (page parente : accueil/hub/catégorie — fixe le préfixe d'URL et la liste qui reprend la page côté site ; `src/lib/parents.ts` du dashboard, préfixe **déduit** des pages déjà rattachées, jamais déclaré), content (JSONB, dont `brief.instructions` et **`card`** = titre/accroche/description/badges/featured affichés par le parent), status (draft/published/optimized/error/redirected/brief_ready/**external**), **redirect_to** (cible d'une ligne `redirected`, chemin absolu — servie en redirection permanente par les sites CMS via `getRedirect` quand aucune page publiée ne répond, les 301 de `next.config` passant avant ; RLS anon = `published` + `redirected` ; migration `migration-redirects.sql` 2026-08-30), deployed_revision_id |
 | site_tasks | **Chantiers — le carnet de bord** (ce que le user décide ; aucun job n'y touche) | site_key (nullable = transverse, sans FK), title, body, status (inbox/todo/doing/blocked/idea/done/dropped), blocked_by, pinned, due, source (dashboard/telegram/seed:*), opportunity_id (note promue au backlog), done_at ; migration `migration-site-tasks.sql` |
+| review_requests | **Demandes d'avis Google par SMS** (bot `/avis`, module GBP lot 1, 2026-10-18) — le numéro ne sert qu'au délai de 60 j et à STOP ; migration `migration-gbp.sql` | site_key, phone_e164, channel (sms/manual), status (sent/delivered/failed/opted_out), twilio_sid, segments, requested_by, sent_at |
 | site_leads | **Demandes laissées dans les formulaires des sites** (route `/api/lead` du site — reprog depuis le 2026-10-01, site sans téléphone) ; RLS : la clé anon **insère** seulement, ne relit rien ; chaque demande part aussi sur Telegram (chat admin) ; migration `migration-site-leads.sql` | site_key, first_name, email, phone, profile, message, source_path, referrer, utm (JSONB), status (new/contacted/won/lost/spam) |
 | opportunities | **Backlog d'actions SEO** (ex-table auto-generate recyclée) | site_id (=site_key), action_type, query, page_url, impact, effort, confidence, priority, justification, source, status (new/planned/done/dismissed), completed_at |
 | seo_measurements | Mesures d'impact par action | site_key, opportunity_id, checkpoint (baseline/j7/j28/j60/j90), clicks, impressions, ctr, position, window_start/end |
@@ -351,7 +369,8 @@ npm run check          # typecheck + lint + format:check + test + knip — ce qu
 | page_images | Images des pages | site_key, slug, image_type (ai/real/stock), file_path, alt_text |
 | blog_articles | Articles de blog | site_key, slug, title, content, tags[], status (draft/published) |
 | product_categories · products | **Module catalogue des sites CMS** (template site-starter, e-com vitrine tel-only) — RLS anon lit `published` + `sold_out` (servi barré + OutOfStock, jamais 404), `hidden` invisible ; migration `migration-products.sql` | product_categories : site_key, slug, name, description, display_order · products : site_key, slug, category_id, name, description, price, unit, attributes (JSONB), images[], status (published/hidden/sold_out), featured |
-| vehicles | Inventaire voitures | marque, modele, annee, prix, carburant, boite, couleur, photos[] |
+| product_variants · orders · order_items · order_counters · webhook_events | **Module commerce** (template **ecom-starter**, 2026-10-14) — panier + Stripe Checkout, commandes et stock ; migration `migration-commerce.sql`. RLS : anon lit les variantes `published`, **rien d'autre** (commandes/stock = clé de service du site). RPC `next_order_number`, `claim_stock` (atomique, lève STOCK_UNAVAILABLE) / `release_stock` | product_variants : product_id, name, options (JSONB axes), price, compare_at_price, stock (NULL = non suivi), status, image · orders : number (CMD-AAAA-NNNNN), status (pending/paid/shipped/delivered/cancelled/refunded), email/phone/customer_name, shipping_address (JSONB), shipping_method/cents, discount_code/cents, subtotal/total_cents, stripe_checkout_id, stripe_payment_intent, paid_at · order_items : instantané (product_name, variant_name, unit_cents, quantity) |
+| vehicles | **Parc des concessionnaires en base** (Okaz depuis le 2026-10-16 ; Ideo Car reste sur `data/cars.ts`) — écrit par `/admin` du site et par le bot `/voiture` (`src/vehicles/store.ts`, `carStore(site)` choisit fichiers ou base selon `delivery_mode`) ; RLS anon lit tout, `sold` reste servi barré ; un seul `hero` par site ; purge par `POST /api/revalidate` (tag `cars:<site>`) ; migration `migration-vehicles.sql` | site_key, slug, brand, model, year, price, km, fuel, gearbox, categories[], power, fiscal_power, color, doors, equipment[], description, images[] (public/ ou Storage `page-images/<site>/vehicules/<slug>/`), featured, hero, status (available/sold), date_added, date_sold |
 | menu_categories | Catégories menu restaurant | site_key, slug, name, display_order |
 | menu_items | Articles menu restaurant | category_id, name, price, allergens[], is_vegetarian, status |
 
