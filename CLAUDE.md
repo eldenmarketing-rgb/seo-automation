@@ -247,6 +247,15 @@ visuels, Q&R) ; 4) publication par l'API Google Business Profile (accès sur for
   `avis` (votes < ¼ de la médiane des 3 premiers) → `horaires` (fiche ≠ `hours_expected` saisi) → `ok`.
 - **Action** : une `GBP_OPTIMIZATION` par site, `source = scan:gbp`, `details.lines` = preuves ; elle remplace celle
   du module Concurrents pour le même site. Contrainte `opportunities_sources_check` étendue à `gbp` dans la migration.
+- **API Google câblée (lot 4, 2026-10-18)** : dashboard `src/lib/gbp-google.ts` + routes `/api/gbp/oauth{,/start,/callback}`
+  (jeton OAuth dans `seo-dashboard/.env.gbp-token.json`, ignoré par git, scope `business.manage`), `/api/gbp/google/locations`
+  (comptes + emplacements, rapprochés par place ID), `/api/gbp/google/sync` (fiche + avis avec leur nom Google →
+  `gbp_reviews.google_name` ; le job n'appelle plus DataForSEO pour les avis d'une fiche reliée), `/api/gbp/posts/[id]/publish`
+  (`localPosts` v4), `/api/gbp/reviews/[id]/reply`, `/api/gbp/google/media`. Chaque publication = un clic du user.
+  Préalables côté Google (compte propriétaire des fiches) : APIs Account Management / Business Information / My Business
+  activées sur le projet `seo-automatisation-478810`, client OAuth Web avec l'URI `https://seo.adseor.com/api/gbp/oauth/callback`
+  → `GBP_OAUTH_CLIENT_ID` / `GBP_OAUTH_CLIENT_SECRET` dans l'env du dashboard, formulaire « Basic API Access »
+  (n° de projet 21878562314) — quota 0 = 403 sur tous les appels tant que Google n'a pas accepté.
 - Piège vu le 18/10 : aucun 09 SMS en stock chez Twilio ; les SMS partent d'un 09 39 du CRM garage.
 
 ### Module Concurrents — « pourquoi je suis derrière » (2026-08-30)
