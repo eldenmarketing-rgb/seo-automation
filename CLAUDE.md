@@ -91,6 +91,12 @@ husky + lint-staged, hooks Claude Code, CI GitHub ; détail dans son `README.md`
   `idsOnly=1` sur `/api/clusters` reste non paginé (tri par lots).
 - **Vue par défaut = ce qui attend une décision** : Mots-clés `status=new` (onglets avec compteurs),
   Clusters `new`, Pages `status=todo` (draft + brief_ready + error ; `all` = tout sauf 301), Backlog `new`.
+- **Performance GSC dans la liste des pages (2026-10-21)** : chaque ligne de `/pages` porte clics, impressions,
+  position pondérée et requêtes distinctes (dont « top 10 ») des 28 derniers jours livrés (`src/lib/page-performance.ts`
+  du dashboard : `gsc_page_daily` pour les totaux, `gsc_positions` pour les requêtes). Bouton **« Meilleures pages
+  d'abord »** = `?sort=perf` (requêtes en 1re page → clics → impressions → position) ; en-têtes cliquables
+  `sort=clicks|impressions|position|queries&dir=`. Le tri se fait côté serveur sur tout le périmètre **avant** la
+  pagination. Lecture par tranches de 1 000 (`fetchAllRows`) : PostgREST plafonne à 1 000 lignes même avec `.limit()`.
 
 ### API routes
 `/api/overview`, `/api/backlog` (+ `[id]` PATCH/DELETE, + `scan` POST, paginé), `/api/tasks` (GET/POST, + `[id]` PATCH/DELETE, + `[id]/promote` POST), `/api/gsc` (+ `sync` POST), `/api/briefs/prepare` (GET) + `/api/briefs/generate` (POST, overrides), `/api/generate/prompt` (GET
@@ -205,6 +211,10 @@ L'état est dans l'URL (`?site=&view=&period=&compare=`). Bouton **Synchroniser*
 lance `src/jobs/gsc-sync.ts --trigger=dashboard` (un seul passage à la fois, ~8 s) ; le pied de page affiche
 la vraie dernière synchro lue dans `automation_logs` (job `gsc-sync`). Une référence tronquée par l'historique
 est signalée, jamais tue. Les totaux viennent toujours de `gsc_page_daily` ; le détail par requête reste partiel.
+**Tri (2026-10-21)** : en-têtes Clics · Impressions · CTR · Position cliquables (▼ sur Position = la meilleure en tête),
+vue **Pages** avec colonne **Requêtes** (distinctes, dont « top 10 » = position moyenne ≤ 10, lues dans `gsc_positions`
+sur la période courante) et bouton **« Meilleures pages d'abord »** (top 10 → clics → impressions). Tri côté écran, les
+lignes « disparu » toujours en queue. Même tri sur `/pages` (Liste), côté serveur, voir ci-dessus.
 
 ### Éditeur de page — brief depuis les faits (chantier A, 2026-08-28)
 - **Types de page réels** (`src/lib/page-types.ts` du dashboard, contrainte `seo_pages_page_type_check`
