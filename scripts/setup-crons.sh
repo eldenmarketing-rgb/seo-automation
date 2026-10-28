@@ -47,6 +47,10 @@ cat >> /tmp/crontab_clean << EOF
 # Fiches Google : fiche, pack local, avis (fiches confirmées seulement)
 20 7 * * 1 cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/gbp-scan.ts --apply --trigger=cron >> $LOG_FILE 2>&1 $MARKER
 
+# Etsy Maison Cirelle : commandes → Telegram + stock commun site ↔ Etsy (toutes les 15 min) $MARKER
+# Renouvelle aussi le jeton OAuth Etsy (refresh 90 j) : tant qu'il tourne, l'accès ne meurt pas. $MARKER
+*/15 * * * * cd $PROJECT_DIR && /usr/bin/env npx tsx src/jobs/etsy-sync.ts --apply --trigger=cron >> $LOG_FILE 2>&1 $MARKER
+
 # Weekly backlog scan — détecteurs SEO + mesures (Monday 7:30 AM, après la sync ET le crawl, via le dashboard pm2) $MARKER
 # Les identifiants Basic Auth sont lus depuis .env.local du dashboard (jamais dans git) $MARKER
 30 7 * * 1 curl -s -X POST -u "\$(grep '^DASHBOARD_USER=' $DASH_ENV | cut -d= -f2-):\$(grep '^DASHBOARD_PASSWORD=' $DASH_ENV | cut -d= -f2-)" http://localhost:3000/api/backlog/scan >> $LOG_FILE 2>&1 $MARKER

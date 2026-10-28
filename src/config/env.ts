@@ -54,6 +54,15 @@ const SPEC = {
     doc: 'Numéro expéditeur des SMS (E.164, capacité SMS — un 09 du compte)',
   },
 
+  // Etsy — boutique Maison Cirelle (synchro stock + commandes, src/jobs/etsy-sync.ts)
+  ETSY_API_KEY: { required: false, doc: 'Keystring de l’app Etsy' },
+  ETSY_SHARED_SECRET: { required: false, doc: 'Shared secret de l’app Etsy (x-api-key = clé:secret)' },
+  ETSY_TOKEN_FILE: {
+    required: false,
+    default: '/home/ubuntu/sites/Poopy/.etsy-token.json',
+    doc: 'Jeton OAuth Etsy (accès 1 h + refresh 90 j), réécrit à chaque renouvellement',
+  },
+
   // Anthropic — plus utilisé par les jobs (human-in-the-loop via CLI/dashboard), gardé pour les scripts
   ANTHROPIC_API_KEY: { required: false, doc: 'Clé API Claude (optionnelle)' },
 
@@ -126,6 +135,15 @@ export const env = {
   },
   get TWILIO_SMS_FROM(): string | undefined {
     return read('TWILIO_SMS_FROM');
+  },
+  get ETSY_API_KEY(): string | undefined {
+    return read('ETSY_API_KEY');
+  },
+  get ETSY_SHARED_SECRET(): string | undefined {
+    return read('ETSY_SHARED_SECRET');
+  },
+  get ETSY_TOKEN_FILE(): string {
+    return read('ETSY_TOKEN_FILE') as string;
   },
   get ANTHROPIC_API_KEY(): string | undefined {
     return read('ANTHROPIC_API_KEY');
