@@ -477,8 +477,8 @@ const articles: Article[] = [
     order: 5,
     slug: "conseils/cire-de-soja-paraffine-cire-abeille",
     heroImage: img(
-      "bougie-parfumee-senteur-eucalyptus",
-      "Bougie parfumée Eucalyptus coulée en cire de soja",
+      "bougie-gourmande-glace-milkshake-cerise",
+      "Bougie milkshake Cerise en cire de soja et gel pour bougie",
       1200,
       1600,
     ),
@@ -576,10 +576,10 @@ const articles: Article[] = [
     order: 6,
     slug: "conseils/parfum-de-grasse-bougie",
     heroImage: img(
-      "coffret-fondant-parfume-lavande-rose-ancienne",
-      "Coffret de fondants parfumés lavande et rose ancienne, parfums de Grasse",
-      1600,
+      "bougie-parfumee-senteur-jasmin",
+      "Bougie parfumée Jasmin, parfum de Grasse, en cire de soja",
       1200,
+      1600,
     ),
     h1: "Parfum de Grasse dans une bougie : ce que ça veut dire",
     meta_title: "Parfum de Grasse pour bougie : ce que ça veut dire",
@@ -662,6 +662,7 @@ const articles: Article[] = [
       },
     ],
     links: [
+      P("bougie-jasmin", "Bougie Jasmin", "La fleur emblématique de Grasse, en cire de soja."),
       P("coffret-fondants-lavande-rose", "Coffret Lavande et rose ancienne", "Deux grands classiques de la parfumerie."),
       CAT.bougies,
       CAT.fondants,
