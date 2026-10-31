@@ -46,6 +46,9 @@ const SPEC = {
   DATAFORSEO_LOGIN: { required: false, doc: 'Identifiant API DataForSEO' },
   DATAFORSEO_PASSWORD: { required: false, doc: 'Mot de passe API DataForSEO' },
 
+  // Bing Webmaster Tools — soumission d'URL et statistiques (sites importés depuis GSC)
+  BING_WEBMASTER_API_KEY: { required: false, doc: 'Clé API Bing Webmaster (Paramètres → Accès API)' },
+
   // Twilio — numéros trackés (TwiML servi par les sites) et SMS de demande d'avis (`/avis`)
   TWILIO_ACCOUNT_SID: { required: false, doc: 'Compte Twilio (ACxxxx)' },
   TWILIO_AUTH_TOKEN: { required: false, doc: 'Jeton du compte Twilio' },
@@ -126,6 +129,9 @@ export const env = {
   },
   get DATAFORSEO_PASSWORD(): string | undefined {
     return read('DATAFORSEO_PASSWORD');
+  },
+  get BING_WEBMASTER_API_KEY(): string | undefined {
+    return read('BING_WEBMASTER_API_KEY');
   },
   get TWILIO_ACCOUNT_SID(): string | undefined {
     return read('TWILIO_ACCOUNT_SID');
